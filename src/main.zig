@@ -8,16 +8,14 @@ pub fn main() !void {
     var chunk = bytecode.Chunk.init(gpa.allocator());
     defer chunk.free();
 
-    const constant = try chunk.add_constant(1.2);
-    const constant2 = try chunk.add_constant(42);
+    // try chunk.write_constant(1.2, 1);
+    // try chunk.write_constant(42, 1);
+  var i: u32 = 0;
+  while (i < 259) : (i += 1) {
+    try chunk.write_constant(@floatFromInt(i), 0);
+  }
 
-    try chunk.write_chunk(bytecode.OpCode.OP_CONSTANT, 1);
-    try chunk.write_chunk(@enumFromInt(constant), 1);
-
-    try chunk.write_chunk(bytecode.OpCode.OP_CONSTANT, 1);
-    try chunk.write_chunk(@enumFromInt(constant2), 1);
-
-    try chunk.write_chunk(bytecode.OpCode.OP_RETURN, 2);
+    // try chunk.write_instruction(bytecode.OpCode.OP_RETURN, 2);
 
     var stdout = std.io.getStdOut().writer();
     try debug.disassembleChunk(&chunk, "test chunk", &stdout.any());
@@ -28,8 +26,8 @@ test "disassembling" {
     var chunk = bytecode.Chunk.init(alloc);
     defer chunk.free();
 
-    try chunk.write_chunk(bytecode.OpCode.OP_RETURN, 1);
-    try chunk.write_chunk(bytecode.OpCode.OP_RETURN, 2);
+    try chunk.write_instruction(bytecode.OpCode.OP_RETURN, 1);
+    try chunk.write_instruction(bytecode.OpCode.OP_RETURN, 2);
 
     var out = std.ArrayList(u8).init(alloc);
     defer out.deinit();

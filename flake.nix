@@ -1,17 +1,20 @@
 {
   description = "A simple flake template";
 
-  outputs = { self, nixpkgs, nixpkgs-unstable, ... }:
+  inputs.zig.url = "github:mitchellh/zig-overlay";
+  inputs.zig.inputs.nixpkgs.follows = "nixpkgs";
+  inputs.zls.url = "github:zigtools/zls";
+  inputs.zls.inputs.zig-overlay.follows = "zig";
+  inputs.zls.inputs.nixpkgs.follows = "nixpkgs";
+
+  outputs = { self, nixpkgs, nixpkgs-unstable, zig, zls, ... }:
 
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
-      pkgs-unstable = nixpkgs-unstable.legacyPackages.${system};
-      buildInputs = (with pkgs; [
-      ]) ++ (with pkgs-unstable; [
-        zig
-        zls
-      ]);
+      zigpkg = zig.packages.x86_64-linux.master;
+      zlspkg = zls.packages.x86_64-linux.zls;
+      buildInputs = [ zigpkg zlspkg ];
     in {
       devShells.${system}.default = pkgs.mkShell { inherit buildInputs; };
 

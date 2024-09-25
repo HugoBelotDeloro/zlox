@@ -6,6 +6,8 @@ const Value = @import("value.zig").Value;
 
 const VM = @This();
 
+const DEBUG_TRACE_EXECUTION = false and !@import("builtin").is_test;
+
 chunk: *Chunk,
 ip: [*]u8,
 
@@ -13,6 +15,9 @@ pub fn interpret(chunk: *Chunk, writer: std.io.AnyWriter) !InterpretResult {
     var vm = VM{ .chunk = chunk, .ip = chunk.code.items.ptr };
 
     while (true) {
+        if (DEBUG_TRACE_EXECUTION) {
+            _ = try @import("debug.zig").disassembleInstruction(vm.chunk, vm.ip - vm.chunk.code.items.ptr, std.io.getStdErr().writer().any());
+        }
         switch (vm.read_instruction()) {
             .OP_RETURN => return .OK,
             .OP_CONSTANT => {

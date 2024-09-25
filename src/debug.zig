@@ -4,7 +4,7 @@ const Chunk = bytecode.Chunk;
 const OpCode = bytecode.OpCode;
 const values = @import("value.zig");
 
-pub fn disassembleChunk(chunk: *Chunk, name: []const u8, writer: *const std.io.AnyWriter) !void {
+pub fn disassembleChunk(chunk: *Chunk, name: []const u8, writer: std.io.AnyWriter) !void {
     try writer.print("== {s} ==\n", .{name});
 
     var i: usize = 0;
@@ -13,7 +13,7 @@ pub fn disassembleChunk(chunk: *Chunk, name: []const u8, writer: *const std.io.A
     }
 }
 
-pub fn disassembleInstruction(chunk: *Chunk, offset: usize, writer: *const std.io.AnyWriter) !usize {
+pub fn disassembleInstruction(chunk: *Chunk, offset: usize, writer: std.io.AnyWriter) !usize {
     try writer.print("{d:0>4} ", .{offset});
     if (offset > 0 and chunk.get_line(offset) == chunk.get_line(offset - 1)) {
         _ = try writer.write("   | ");
@@ -30,7 +30,7 @@ pub fn disassembleInstruction(chunk: *Chunk, offset: usize, writer: *const std.i
     };
 }
 
-fn constant_instruction(instruction: OpCode, offset: usize, writer: *const std.io.AnyWriter, chunk: *Chunk) !usize {
+fn constant_instruction(instruction: OpCode, offset: usize, writer: std.io.AnyWriter, chunk: *Chunk) !usize {
     const constant_id = chunk.code.items[offset + 1];
     const constant = chunk.constants.items[constant_id];
     try writer.print("{s: <16} {d: >4} '{d}'\n", .{ @tagName(instruction), constant_id, constant });
@@ -38,7 +38,7 @@ fn constant_instruction(instruction: OpCode, offset: usize, writer: *const std.i
     return offset + 2;
 }
 
-fn constant_long_instruction(offset: usize, writer: *const std.io.AnyWriter, chunk: *Chunk) !usize {
+fn constant_long_instruction(offset: usize, writer: std.io.AnyWriter, chunk: *Chunk) !usize {
     const constant_id: u24 = std.mem.bytesAsValue(u24, &chunk.code.items[offset + 1]).*;
     const constant = chunk.constants.items[constant_id];
     try writer.print("{s: <16} {d: >4} '{d}'\n", .{ @tagName(OpCode.OP_CONSTANT_LONG), constant_id, constant });
@@ -46,12 +46,12 @@ fn constant_long_instruction(offset: usize, writer: *const std.io.AnyWriter, chu
     return offset + 4;
 }
 
-fn simple_instruction(instruction: OpCode, offset: usize, writer: *const std.io.AnyWriter) !usize {
+fn simple_instruction(instruction: OpCode, offset: usize, writer: std.io.AnyWriter) !usize {
     try writer.print("{s}\n", .{@tagName(instruction)});
     return offset + 1;
 }
 
-fn unknown_opcode(instruction: OpCode, offset: usize, writer: *const std.io.AnyWriter) !usize {
+fn unknown_opcode(instruction: OpCode, offset: usize, writer: std.io.AnyWriter) !usize {
     try writer.print("Unknown opcode {d}\n", .{@intFromEnum(instruction)});
     return offset + 1;
 }

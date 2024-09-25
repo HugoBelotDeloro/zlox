@@ -16,7 +16,7 @@ pub fn main() !void {
     try chunk.write_instruction(.OP_RETURN, 1);
 
     var stdout = std.io.getStdOut().writer();
-    try debug.disassembleChunk(&chunk, "test chunk", &stdout.any());
+    try debug.disassembleChunk(&chunk, "test chunk", stdout.any());
 
     _ = try VM.interpret(&chunk, stdout.any());
 }
@@ -31,7 +31,7 @@ test "disassembling" {
 
     var out = std.ArrayList(u8).init(alloc);
     defer out.deinit();
-    try debug.disassembleChunk(&chunk, "test chunk", &out.writer().any());
+    try debug.disassembleChunk(&chunk, "test chunk", out.writer().any());
 
     try std.testing.expect(std.mem.eql(u8, out.items,
         \\== test chunk ==

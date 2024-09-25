@@ -1,6 +1,7 @@
 const std = @import("std");
 const bytecode = @import("bytecode.zig");
 const debug = @import("debug.zig");
+const VM = @import("vm.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -8,17 +9,16 @@ pub fn main() !void {
     var chunk = bytecode.Chunk.init(gpa.allocator());
     defer chunk.free();
 
-    // try chunk.write_constant(1.2, 1);
-    // try chunk.write_constant(42, 1);
-  var i: u32 = 0;
-  while (i < 259) : (i += 1) {
-    try chunk.write_constant(@floatFromInt(i), 0);
-  }
-
-    // try chunk.write_instruction(bytecode.OpCode.OP_RETURN, 2);
+    var i: u32 = 0;
+    while (i < 259) : (i += 1) {
+        try chunk.write_constant(@floatFromInt(i), 0);
+    }
+    try chunk.write_instruction(.OP_RETURN, 1);
 
     var stdout = std.io.getStdOut().writer();
     try debug.disassembleChunk(&chunk, "test chunk", &stdout.any());
+
+    _ = try VM.interpret(&chunk, stdout.any());
 }
 
 test "disassembling" {

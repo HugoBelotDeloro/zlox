@@ -16,9 +16,9 @@ pub fn disassembleChunk(chunk: *Chunk, name: []const u8, writer: *const std.io.A
 pub fn disassembleInstruction(chunk: *Chunk, offset: usize, writer: *const std.io.AnyWriter) !usize {
     try writer.print("{d:0>4} ", .{offset});
     if (offset > 0 and chunk.get_line(offset) == chunk.get_line(offset - 1)) {
-      _ = try writer.write("   | ");
+        _ = try writer.write("   | ");
     } else {
-      try writer.print("{d: >4} ", .{chunk.get_line(offset)});
+        try writer.print("{d: >4} ", .{chunk.get_line(offset)});
     }
 
     const instruction: OpCode = @enumFromInt(chunk.code.items[offset]);
@@ -31,19 +31,19 @@ pub fn disassembleInstruction(chunk: *Chunk, offset: usize, writer: *const std.i
 }
 
 fn constant_instruction(instruction: OpCode, offset: usize, writer: *const std.io.AnyWriter, chunk: *Chunk) !usize {
-  const constant_id = chunk.code.items[offset + 1];
-  const constant = chunk.constants.items[constant_id];
-  try writer.print("{s: <16} {d: >4} '{d}'\n", .{@tagName(instruction), constant_id, constant});
+    const constant_id = chunk.code.items[offset + 1];
+    const constant = chunk.constants.items[constant_id];
+    try writer.print("{s: <16} {d: >4} '{d}'\n", .{ @tagName(instruction), constant_id, constant });
 
-  return offset + 2;
+    return offset + 2;
 }
 
 fn constant_long_instruction(offset: usize, writer: *const std.io.AnyWriter, chunk: *Chunk) !usize {
-  const constant_id: u24 = std.mem.bytesAsValue(u24, &chunk.code.items[offset+1]).*;
-  const constant = chunk.constants.items[constant_id];
-  try writer.print("{s: <16} {d: >4} '{d}'\n", .{@tagName(OpCode.OP_CONSTANT_LONG), constant_id, constant});
+    const constant_id: u24 = std.mem.bytesAsValue(u24, &chunk.code.items[offset + 1]).*;
+    const constant = chunk.constants.items[constant_id];
+    try writer.print("{s: <16} {d: >4} '{d}'\n", .{ @tagName(OpCode.OP_CONSTANT_LONG), constant_id, constant });
 
-  return offset + 4;
+    return offset + 4;
 }
 
 fn simple_instruction(instruction: OpCode, offset: usize, writer: *const std.io.AnyWriter) !usize {

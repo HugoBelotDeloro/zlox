@@ -10,14 +10,16 @@ pub fn main() !void {
     defer chunk.free();
 
     var i: u32 = 0;
-    while (i < 259) : (i += 1) {
+    while (i < 4) : (i += 1) {
         try chunk.write_constant(@floatFromInt(i), 0);
     }
     try chunk.write_instruction(.OP_RETURN, 1);
 
     var stdout = std.io.getStdOut().writer();
+
     try debug.disassembleChunk(&chunk, "test chunk", stdout.any());
 
+    _ = try stdout.write("\n\n== interpret ==\n");
     _ = try VM.interpret(&chunk, stdout.any());
 }
 

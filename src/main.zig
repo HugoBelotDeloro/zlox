@@ -1,12 +1,13 @@
 const std = @import("std");
-const bytecode = @import("bytecode.zig");
+const Chunk = @import("chunk.zig");
+const OpCode = Chunk.OpCode;
 const debug = @import("debug.zig");
 const VM = @import("vm.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
-    var chunk = bytecode.Chunk.init(gpa.allocator());
+    var chunk = Chunk.init(gpa.allocator());
     defer chunk.free();
 
     var i: u32 = 0;
@@ -25,11 +26,11 @@ pub fn main() !void {
 
 test "disassembling" {
     const alloc = std.testing.allocator;
-    var chunk = bytecode.Chunk.init(alloc);
+    var chunk = Chunk.init(alloc);
     defer chunk.free();
 
-    try chunk.write_instruction(bytecode.OpCode.OP_RETURN, 1);
-    try chunk.write_instruction(bytecode.OpCode.OP_RETURN, 2);
+    try chunk.write_instruction(OpCode.OP_RETURN, 1);
+    try chunk.write_instruction(OpCode.OP_RETURN, 2);
 
     var out = std.ArrayList(u8).init(alloc);
     defer out.deinit();

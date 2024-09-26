@@ -1,7 +1,6 @@
 const std = @import("std");
-const bytecode = @import("bytecode.zig");
-const Chunk = bytecode.Chunk;
-const OpCode = bytecode.OpCode;
+const Chunk = @import("chunk.zig");
+const OpCode = Chunk.OpCode;
 const values = @import("value.zig");
 
 pub fn disassembleChunk(chunk: *Chunk, name: []const u8, writer: std.io.AnyWriter) !void {

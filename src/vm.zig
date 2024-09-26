@@ -46,10 +46,33 @@ pub fn interpret(chunk: *Chunk, writer: std.io.AnyWriter) !InterpretResult {
                 const constant = vm.read_constant_long();
                 vm.push(constant);
             },
+            .OP_ADD => {
+                const r = vm.pop();
+                const l = vm.pop();
+                vm.push(l + r);
+            },
+            .OP_SUBTRACT => {
+                const r = vm.pop();
+                const l = vm.pop();
+                vm.push(l - r);
+            },
+            .OP_MULTIPLY => {
+                const r = vm.pop();
+                const l = vm.pop();
+                vm.push(l * r);
+            },
+            .OP_DIVIDE => {
+                const r = vm.pop();
+                const l = vm.pop();
+                vm.push(l / r);
+            },
+            .OP_NEGATE => {
+                vm.push(-vm.pop());
+            },
             else => {},
         }
     }
-    return .OK;
+    unreachable;
 }
 
 pub const InterpretResult = enum {

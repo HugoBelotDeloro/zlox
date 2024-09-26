@@ -10,11 +10,12 @@ pub fn main() !void {
     var chunk = Chunk.init(gpa.allocator());
     defer chunk.free();
 
-    var i: u32 = 0;
-    while (i < 4) : (i += 1) {
-        try chunk.write_constant(@floatFromInt(i), 0);
-    }
-    try chunk.write_instruction(.OP_RETURN, 1);
+    try chunk.write_constant(1.2, 0);
+    try chunk.write_constant(3.4, 1);
+    try chunk.write_instruction(.OP_ADD, 2);
+    try chunk.write_constant(5.6, 3);
+    try chunk.write_instruction(.OP_DIVIDE, 4);
+    try chunk.write_instruction(.OP_RETURN, 5);
 
     var stdout = std.io.getStdOut().writer();
 

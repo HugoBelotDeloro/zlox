@@ -22,7 +22,7 @@ pub fn disassembleInstruction(chunk: *Chunk, offset: usize, writer: std.io.AnyWr
 
     const instruction: OpCode = @enumFromInt(chunk.code.items[offset]);
     return switch (instruction) {
-        .OP_RETURN => simple_instruction(instruction, offset, writer),
+        .OP_RETURN, .OP_ADD, .OP_SUBTRACT, .OP_MULTIPLY, .OP_DIVIDE, .OP_NEGATE => simple_instruction(instruction, offset, writer),
         .OP_CONSTANT => constant_instruction(instruction, offset, writer, chunk),
         .OP_CONSTANT_LONG => constant_long_instruction(offset, writer, chunk),
         _ => unknown_opcode(instruction, offset, writer),

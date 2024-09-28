@@ -1,8 +1,8 @@
 const std = @import("std");
-const Chunk = @import("chunk.zig");
+const Chunk = @import("Chunk.zig");
 const OpCode = Chunk.OpCode;
 const debug = @import("debug.zig");
-const VM = @import("vm.zig");
+const VM = @import("Vm.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -10,12 +10,12 @@ pub fn main() !void {
     var chunk = Chunk.init(gpa.allocator());
     defer chunk.free();
 
-    try chunk.write_constant(1.2, 0);
-    try chunk.write_constant(3.4, 1);
-    try chunk.write_instruction(.OP_ADD, 2);
-    try chunk.write_constant(5.6, 3);
-    try chunk.write_instruction(.OP_DIVIDE, 4);
-    try chunk.write_instruction(.OP_RETURN, 5);
+    try chunk.writeConstant(1.2, 0);
+    try chunk.writeConstant(3.4, 1);
+    try chunk.writeInstruction(.OP_ADD, 2);
+    try chunk.writeConstant(5.6, 3);
+    try chunk.writeInstruction(.OP_DIVIDE, 4);
+    try chunk.writeInstruction(.OP_RETURN, 5);
 
     var stdout = std.io.getStdOut().writer();
 
@@ -30,8 +30,8 @@ test "disassembling" {
     var chunk = Chunk.init(alloc);
     defer chunk.free();
 
-    try chunk.write_instruction(OpCode.OP_RETURN, 1);
-    try chunk.write_instruction(OpCode.OP_RETURN, 2);
+    try chunk.writeInstruction(OpCode.OP_RETURN, 1);
+    try chunk.writeInstruction(OpCode.OP_RETURN, 2);
 
     var out = std.ArrayList(u8).init(alloc);
     defer out.deinit();

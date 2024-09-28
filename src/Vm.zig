@@ -1,9 +1,9 @@
 const std = @import("std");
-const Chunk = @import("chunk.zig");
+const Chunk = @import("Chunk.zig");
 const OpCode = Chunk.OpCode;
 const Value = @import("value.zig").Value;
 
-const VM = @This();
+const Vm = @This();
 
 const DEBUG_TRACE_EXECUTION = true and !@import("builtin").is_test;
 const STACK_MAX = 1 << 8;
@@ -14,7 +14,7 @@ stack: [STACK_MAX]Value,
 stack_top: [*]Value,
 
 pub fn interpret(chunk: *Chunk, writer: std.io.AnyWriter) !InterpretResult {
-    var vm = VM{
+    var vm = Vm{
         .chunk = chunk,
         .ip = chunk.code.items.ptr,
         .stack = undefined,
@@ -25,25 +25,20 @@ pub fn interpret(chunk: *Chunk, writer: std.io.AnyWriter) !InterpretResult {
     while (true) {
         if (DEBUG_TRACE_EXECUTION) {
             const stderr = std.io.getStdErr().writer().any();
-            _ = try stderr.write("          ");
-            var slot: [*]Value = &vm.stack;
-            while (vm.stack_top - slot > 0) : (slot += 1) {
-                _ = try stderr.print("[ {d} ]", .{slot[0]});
-            }
-            _ = try stderr.write("\n");
+            try vm.printStack(stderr);
             _ = try @import("debug.zig").disassembleInstruction(vm.chunk, vm.ip - vm.chunk.code.items.ptr, stderr);
         }
-        switch (vm.read_instruction()) {
+        switch (vm.readInstruction()) {
             .OP_RETURN => {
                 try writer.print("{d}\n", .{vm.pop()});
                 return .OK;
             },
             .OP_CONSTANT => {
-                const constant = vm.read_constant();
+                const constant = vm.readConstant();
                 vm.push(constant);
             },
             .OP_CONSTANT_LONG => {
-                const constant = vm.read_constant_long();
+                const constant = vm.readConstantLong();
                 vm.push(constant);
             },
             .OP_ADD => {
@@ -81,30 +76,39 @@ pub const InterpretResult = enum {
     RUNTIME_ERROR,
 };
 
-fn push(self: *VM, value: Value) void {
+fn push(self: *Vm, value: Value) void {
     self.stack_top[0] = value;
     self.stack_top += 1;
 }
 
-fn pop(self: *VM) Value {
+fn pop(self: *Vm) Value {
     self.stack_top -= 1;
     return self.stack_top[0];
 }
 
-fn read_instruction(self: *VM) OpCode {
+fn readInstruction(self: *Vm) OpCode {
     const instr = self.ip[0];
     self.ip += 1;
     return @enumFromInt(instr);
 }
 
-fn read_constant(self: *VM) Value {
+fn readConstant(self: *Vm) Value {
     const id = self.ip[0];
     self.ip += 1;
     return self.chunk.constants.items[id];
 }
 
-fn read_constant_long(self: *VM) Value {
+fn readConstantLong(self: *Vm) Value {
     const constant_id = std.mem.bytesAsValue(u24, self.ip).*;
     self.ip += 3;
     return self.chunk.constants.items[constant_id];
+}
+
+fn printStack(self: *Vm, writer: std.io.AnyWriter) !void {
+    _ = try writer.write("          ");
+    var slot: [*]Value = &self.stack;
+    while (self.stack_top - slot > 0) : (slot += 1) {
+        _ = try writer.print("[ {d} ]", .{slot[0]});
+    }
+    _ = try writer.write("\n");
 }

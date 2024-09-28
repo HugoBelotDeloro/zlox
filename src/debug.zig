@@ -3,7 +3,7 @@ const Chunk = @import("Chunk.zig");
 const OpCode = Chunk.OpCode;
 const values = @import("value.zig");
 
-pub fn disassembleChunk(chunk: *Chunk, name: []const u8, writer: std.io.AnyWriter) !void {
+pub fn disassembleChunk(chunk: *const Chunk, name: []const u8, writer: std.io.AnyWriter) !void {
     try writer.print("== {s} ==\n", .{name});
 
     var i: usize = 0;
@@ -12,7 +12,7 @@ pub fn disassembleChunk(chunk: *Chunk, name: []const u8, writer: std.io.AnyWrite
     }
 }
 
-pub fn disassembleInstruction(chunk: *Chunk, offset: usize, writer: std.io.AnyWriter) !usize {
+pub fn disassembleInstruction(chunk: *const Chunk, offset: usize, writer: std.io.AnyWriter) !usize {
     try writer.print("{d:0>4} ", .{offset});
     if (offset > 0 and chunk.getLine(offset) == chunk.getLine(offset - 1)) {
         _ = try writer.write("   | ");
@@ -29,7 +29,7 @@ pub fn disassembleInstruction(chunk: *Chunk, offset: usize, writer: std.io.AnyWr
     };
 }
 
-fn constantInstruction(instruction: OpCode, offset: usize, writer: std.io.AnyWriter, chunk: *Chunk) !usize {
+fn constantInstruction(instruction: OpCode, offset: usize, writer: std.io.AnyWriter, chunk: *const Chunk) !usize {
     const constant_id = chunk.code.items[offset + 1];
     const constant = chunk.constants.items[constant_id];
     try writer.print("{s: <16} {d: >4} '{d}'\n", .{ @tagName(instruction), constant_id, constant });
@@ -37,7 +37,7 @@ fn constantInstruction(instruction: OpCode, offset: usize, writer: std.io.AnyWri
     return offset + 2;
 }
 
-fn constantLongInstruction(offset: usize, writer: std.io.AnyWriter, chunk: *Chunk) !usize {
+fn constantLongInstruction(offset: usize, writer: std.io.AnyWriter, chunk: *const Chunk) !usize {
     const constant_id: u24 = std.mem.bytesAsValue(u24, &chunk.code.items[offset + 1]).*;
     const constant = chunk.constants.items[constant_id];
     try writer.print("{s: <16} {d: >4} '{d}'\n", .{ @tagName(OpCode.OP_CONSTANT_LONG), constant_id, constant });

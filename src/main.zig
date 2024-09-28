@@ -22,7 +22,7 @@ pub fn main() !void {
     try debug.disassembleChunk(&chunk, "test chunk", stdout.any());
 
     _ = try stdout.write("\n\n== interpret ==\n");
-    _ = try VM.interpret(&chunk, stdout.any());
+    _ = try VM.interpret(&chunk, gpa.allocator(), stdout.any());
 }
 
 test "disassembling" {

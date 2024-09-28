@@ -6,21 +6,19 @@ const Value = @import("value.zig").Value;
 const Vm = @This();
 
 const DEBUG_TRACE_EXECUTION = true and !@import("builtin").is_test;
-const STACK_MAX = 1 << 8;
+const STACK_BASE_SIZE = 1 << 8;
 
-chunk: *Chunk,
+/// Not owned by Vm
+chunk: *const Chunk,
 ip: [*]u8,
-stack: [STACK_MAX]Value,
+stack: []Value,
 stack_top: [*]Value,
 
-pub fn interpret(chunk: *Chunk, writer: std.io.AnyWriter) !InterpretResult {
-    var vm = Vm{
-        .chunk = chunk,
-        .ip = chunk.code.items.ptr,
-        .stack = undefined,
-        .stack_top = undefined,
-    };
-    vm.stack_top = &vm.stack;
+allocator: std.mem.Allocator,
+
+pub fn interpret(chunk: *const Chunk, allocator: std.mem.Allocator, writer: std.io.AnyWriter) !InterpretResult {
+    var vm = try Vm.init(allocator, chunk);
+    defer vm.deinit();
 
     while (true) {
         if (DEBUG_TRACE_EXECUTION) {
@@ -35,39 +33,54 @@ pub fn interpret(chunk: *Chunk, writer: std.io.AnyWriter) !InterpretResult {
             },
             .OP_CONSTANT => {
                 const constant = vm.readConstant();
-                vm.push(constant);
+                try vm.push(constant);
             },
             .OP_CONSTANT_LONG => {
                 const constant = vm.readConstantLong();
-                vm.push(constant);
+                try vm.push(constant);
             },
             .OP_ADD => {
                 const r = vm.pop();
                 const l = vm.pop();
-                vm.push(l + r);
+                try vm.push(l + r);
             },
             .OP_SUBTRACT => {
                 const r = vm.pop();
                 const l = vm.pop();
-                vm.push(l - r);
+                try vm.push(l - r);
             },
             .OP_MULTIPLY => {
                 const r = vm.pop();
                 const l = vm.pop();
-                vm.push(l * r);
+                try vm.push(l * r);
             },
             .OP_DIVIDE => {
                 const r = vm.pop();
                 const l = vm.pop();
-                vm.push(l / r);
+                try vm.push(l / r);
             },
             .OP_NEGATE => {
-                vm.push(-vm.pop());
+                try vm.push(-vm.pop());
             },
             else => {},
         }
     }
     unreachable;
+}
+
+fn init(allocator: std.mem.Allocator, chunk: *const Chunk) !Vm {
+  const stack = try allocator.alloc(f64, STACK_BASE_SIZE);
+    return Vm{
+            .chunk = chunk,
+            .ip = chunk.code.items.ptr,
+            .stack = stack,
+            .stack_top = stack.ptr,
+            .allocator = allocator,
+    };
+}
+
+fn deinit(self: *Vm) void {
+    self.allocator.free(self.stack);
 }
 
 pub const InterpretResult = enum {
@@ -76,7 +89,12 @@ pub const InterpretResult = enum {
     RUNTIME_ERROR,
 };
 
-fn push(self: *Vm, value: Value) void {
+fn push(self: *Vm, value: Value) !void {
+    const stack_size = self.stack_top - self.stack.ptr;
+    if (stack_size == self.stack.len) {
+        const new_stack = try self.allocator.realloc(self.stack, stack_size * 2);
+        std.mem.copyForwards(Value, new_stack, self.stack);
+    }
     self.stack_top[0] = value;
     self.stack_top += 1;
 }
@@ -106,7 +124,7 @@ fn readConstantLong(self: *Vm) Value {
 
 fn printStack(self: *Vm, writer: std.io.AnyWriter) !void {
     _ = try writer.write("          ");
-    var slot: [*]Value = &self.stack;
+    var slot: [*]Value = self.stack.ptr;
     while (self.stack_top - slot > 0) : (slot += 1) {
         _ = try writer.print("[ {d} ]", .{slot[0]});
     }

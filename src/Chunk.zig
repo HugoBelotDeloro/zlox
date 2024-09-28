@@ -73,7 +73,7 @@ pub fn writeConstant(self: *Chunk, value: values.Value, line: u32) !void {
     }
 }
 
-pub fn getLine(self: *Chunk, index: usize) u32 {
+pub fn getLine(self: *const Chunk, index: usize) u32 {
     var i: usize = 0; // Instruction index
 
     for (self.lines.items) |line_info| {

@@ -2,7 +2,8 @@ const std = @import("std");
 const Chunk = @import("Chunk.zig");
 const OpCode = Chunk.OpCode;
 const debug = @import("debug.zig");
-const VM = @import("Vm.zig");
+const Vm = @import("Vm.zig");
+const Parser = @import("Parser.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -11,42 +12,54 @@ pub fn main() !void {
     const argv = std.os.argv;
     if (argv.len == 1) {
         try repl(gpa.allocator());
-    } else if (argv.len == 2) {
-        try runFile(std.mem.span(argv[1]), gpa.allocator());
+    } else if (argv.len == 2) switch (try runFile(std.mem.span(argv[1]), gpa.allocator())) {
+        .COMPILE_ERROR => std.process.exit(65),
+        .RUNTIME_ERROR => std.process.exit(70),
+        else => {},
     } else {
-      _ = try std.io.getStdErr().write("Usage: zlox [path]\n");
-      std.process.exit(64);
+        _ = try std.io.getStdErr().write("Usage: zlox [path]\n");
+        std.process.exit(64);
     }
 }
 
-fn repl(_: std.mem.Allocator) !void {
-  var line_buf: [1024]u8 = undefined;
-  const stdout = std.io.getStdOut().writer().any();
-  const stdin = std.io.getStdIn().reader();
+fn repl(allocator: std.mem.Allocator) !void {
+    var line_buf: [1024]u8 = undefined;
+    const stdout = std.io.getStdOut().writer().any();
+    const stdin = std.io.getStdIn().reader();
 
-  while (true) {
-    _ = try stdout.write("> ");
-    const line = try stdin.readUntilDelimiterOrEof(&line_buf, '\n') orelse "";
+    while (true) {
+        _ = try stdout.write("> ");
+        const line: []u8 = try stdin.readUntilDelimiterOrEof(&line_buf, '\n') orelse "";
 
-    if (line.len == 0) {
-      break;
+        if (line.len == 0) {
+            break;
+        }
+
+        try stdout.print("line: {s}\n", .{line});
+        _ = try executeSource(line, allocator);
     }
-
-    try stdout.print("line: {s}\n", .{line});
-  }
 }
 
 const MAX_FILE_SIZE: usize = 1 << 32;
 
-fn runFile(path: []u8, allocator: std.mem.Allocator) !void {
+fn runFile(path: []const u8, allocator: std.mem.Allocator) !Vm.InterpretResult {
     if (std.fs.cwd().openFile(path, .{})) |file| {
         defer file.close();
         const source = try file.readToEndAlloc(allocator, MAX_FILE_SIZE);
         defer allocator.free(source);
+
+        return executeSource(source, allocator);
     } else |open_err| {
-        try std.io.getStdErr().writer().print("Error opening file {s}: {}", .{path, open_err});
+        try std.io.getStdErr().writer().print("Error opening file {s}: {}", .{ path, open_err });
         std.process.exit(74);
     }
+}
+
+fn executeSource(source: []u8, allocator: std.mem.Allocator) !Vm.InterpretResult {
+    const writer = std.io.getStdOut().writer().any();
+    const bytecode = try Parser.compile(source, allocator);
+    const chunk = Chunk.from_bytecode(bytecode, allocator);
+    return Vm.interpret(&chunk, allocator, writer);
 }
 
 fn simpleProgram(allocator: std.mem.Allocator) !void {
@@ -65,5 +78,5 @@ fn simpleProgram(allocator: std.mem.Allocator) !void {
     try debug.disassembleChunk(&chunk, "test chunk", stdout.any());
 
     _ = try stdout.write("\n\n== interpret ==\n");
-    _ = try VM.interpret(&chunk, allocator, stdout.any());
+    _ = try Vm.interpret(&chunk, allocator, stdout.any());
 }

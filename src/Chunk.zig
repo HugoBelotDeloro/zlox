@@ -34,6 +34,15 @@ pub fn init(alloc: std.mem.Allocator) Chunk {
     };
 }
 
+/// bytecode must have been allocated by allocator
+pub fn from_bytecode(bytecode: []u8, allocator: std.mem.Allocator) Chunk {
+    return Chunk{
+        .code = std.ArrayList(u8).fromOwnedSlice(allocator, bytecode),
+        .constants = std.ArrayList(values.Value).init(allocator),
+        .lines = std.ArrayList(LineInfo).init(allocator),
+    };
+}
+
 pub fn free(self: *Chunk) void {
     self.code.deinit();
     self.constants.deinit();

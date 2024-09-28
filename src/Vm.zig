@@ -20,47 +20,51 @@ pub fn interpret(chunk: *const Chunk, allocator: std.mem.Allocator, writer: std.
     var vm = try Vm.init(allocator, chunk);
     defer vm.deinit();
 
+    return vm.run(writer);
+}
+
+fn run(self: *Vm, writer: std.io.AnyWriter) !InterpretResult {
     while (true) {
         if (DEBUG_TRACE_EXECUTION) {
             const stderr = std.io.getStdErr().writer().any();
-            try vm.printStack(stderr);
-            _ = try @import("debug.zig").disassembleInstruction(vm.chunk, vm.ip - vm.chunk.code.items.ptr, stderr);
+            try self.printStack(stderr);
+            _ = try @import("debug.zig").disassembleInstruction(self.chunk, self.ip - self.chunk.code.items.ptr, stderr);
         }
-        switch (vm.readInstruction()) {
+        switch (self.readInstruction()) {
             .OP_RETURN => {
-                try writer.print("{d}\n", .{vm.pop()});
+                try writer.print("{d}\n", .{self.pop()});
                 return .OK;
             },
             .OP_CONSTANT => {
-                const constant = vm.readConstant();
-                try vm.push(constant);
+                const constant = self.readConstant();
+                try self.push(constant);
             },
             .OP_CONSTANT_LONG => {
-                const constant = vm.readConstantLong();
-                try vm.push(constant);
+                const constant = self.readConstantLong();
+                try self.push(constant);
             },
             .OP_ADD => {
-                const r = vm.pop();
-                const l = vm.pop();
-                try vm.push(l + r);
+                const r = self.pop();
+                const l = self.pop();
+                try self.push(l + r);
             },
             .OP_SUBTRACT => {
-                const r = vm.pop();
-                const l = vm.pop();
-                try vm.push(l - r);
+                const r = self.pop();
+                const l = self.pop();
+                try self.push(l - r);
             },
             .OP_MULTIPLY => {
-                const r = vm.pop();
-                const l = vm.pop();
-                try vm.push(l * r);
+                const r = self.pop();
+                const l = self.pop();
+                try self.push(l * r);
             },
             .OP_DIVIDE => {
-                const r = vm.pop();
-                const l = vm.pop();
-                try vm.push(l / r);
+                const r = self.pop();
+                const l = self.pop();
+                try self.push(l / r);
             },
             .OP_NEGATE => {
-                try vm.push(-vm.pop());
+                try self.push(-self.pop());
             },
             else => {},
         }
@@ -69,13 +73,13 @@ pub fn interpret(chunk: *const Chunk, allocator: std.mem.Allocator, writer: std.
 }
 
 fn init(allocator: std.mem.Allocator, chunk: *const Chunk) !Vm {
-  const stack = try allocator.alloc(f64, STACK_BASE_SIZE);
+    const stack = try allocator.alloc(f64, STACK_BASE_SIZE);
     return Vm{
-            .chunk = chunk,
-            .ip = chunk.code.items.ptr,
-            .stack = stack,
-            .stack_top = stack.ptr,
-            .allocator = allocator,
+        .chunk = chunk,
+        .ip = chunk.code.items.ptr,
+        .stack = stack,
+        .stack_top = stack.ptr,
+        .allocator = allocator,
     };
 }
 

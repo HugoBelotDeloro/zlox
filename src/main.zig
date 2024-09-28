@@ -7,7 +7,50 @@ const VM = @import("Vm.zig");
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
-    var chunk = Chunk.init(gpa.allocator());
+
+    const argv = std.os.argv;
+    if (argv.len == 1) {
+        try repl(gpa.allocator());
+    } else if (argv.len == 2) {
+        try runFile(std.mem.span(argv[1]), gpa.allocator());
+    } else {
+      _ = try std.io.getStdErr().write("Usage: zlox [path]\n");
+      std.process.exit(64);
+    }
+}
+
+fn repl(_: std.mem.Allocator) !void {
+  var line_buf: [1024]u8 = undefined;
+  const stdout = std.io.getStdOut().writer().any();
+  const stdin = std.io.getStdIn().reader();
+
+  while (true) {
+    _ = try stdout.write("> ");
+    const line = try stdin.readUntilDelimiterOrEof(&line_buf, '\n') orelse "";
+
+    if (line.len == 0) {
+      break;
+    }
+
+    try stdout.print("line: {s}\n", .{line});
+  }
+}
+
+const MAX_FILE_SIZE: usize = 1 << 32;
+
+fn runFile(path: []u8, allocator: std.mem.Allocator) !void {
+    if (std.fs.cwd().openFile(path, .{})) |file| {
+        defer file.close();
+        const source = try file.readToEndAlloc(allocator, MAX_FILE_SIZE);
+        defer allocator.free(source);
+    } else |open_err| {
+        try std.io.getStdErr().writer().print("Error opening file {s}: {}", .{path, open_err});
+        std.process.exit(74);
+    }
+}
+
+fn simpleProgram(allocator: std.mem.Allocator) !void {
+    var chunk = Chunk.init(allocator);
     defer chunk.free();
 
     try chunk.writeConstant(1.2, 0);
@@ -22,25 +65,5 @@ pub fn main() !void {
     try debug.disassembleChunk(&chunk, "test chunk", stdout.any());
 
     _ = try stdout.write("\n\n== interpret ==\n");
-    _ = try VM.interpret(&chunk, gpa.allocator(), stdout.any());
-}
-
-test "disassembling" {
-    const alloc = std.testing.allocator;
-    var chunk = Chunk.init(alloc);
-    defer chunk.free();
-
-    try chunk.writeInstruction(OpCode.OP_RETURN, 1);
-    try chunk.writeInstruction(OpCode.OP_RETURN, 2);
-
-    var out = std.ArrayList(u8).init(alloc);
-    defer out.deinit();
-    try debug.disassembleChunk(&chunk, "test chunk", out.writer().any());
-
-    try std.testing.expect(std.mem.eql(u8, out.items,
-        \\== test chunk ==
-        \\0000    1 OP_RETURN
-        \\0001    2 OP_RETURN
-        \\
-    ));
+    _ = try VM.interpret(&chunk, allocator, stdout.any());
 }

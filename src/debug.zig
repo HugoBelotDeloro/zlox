@@ -54,3 +54,23 @@ fn unknownOpcode(instruction: OpCode, offset: usize, writer: std.io.AnyWriter) !
     try writer.print("Unknown opcode {d}\n", .{@intFromEnum(instruction)});
     return offset + 1;
 }
+
+test "disassembling" {
+    const alloc = std.testing.allocator;
+    var chunk = Chunk.init(alloc);
+    defer chunk.free();
+
+    try chunk.writeInstruction(OpCode.OP_RETURN, 1);
+    try chunk.writeInstruction(OpCode.OP_RETURN, 2);
+
+    var out = std.ArrayList(u8).init(alloc);
+    defer out.deinit();
+    try disassembleChunk(&chunk, "test chunk", out.writer().any());
+
+    try std.testing.expect(std.mem.eql(u8, out.items,
+        \\== test chunk ==
+        \\0000    1 OP_RETURN
+        \\0001    2 OP_RETURN
+        \\
+    ));
+}

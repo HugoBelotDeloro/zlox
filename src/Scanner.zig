@@ -1,3 +1,5 @@
+const std = @import("std");
+
 const Scanner = @This();
 
 start: [*]const u8,
@@ -78,6 +80,7 @@ pub fn next(self: *Scanner) !?Token {
 
     const char = self.advance() orelse unreachable;
 
+    if (isAlpha(char)) return self.identifer();
     if (isDigit(char)) return self.number();
 
     switch (char) {
@@ -104,7 +107,7 @@ pub fn next(self: *Scanner) !?Token {
 }
 
 fn skipWhitespace(self: *Scanner) void {
-    while (self.peek()) |char| switch(char) {
+    while (self.peek()) |char| switch (char) {
         ' ', '\t', '\r' => {
             _ = self.advance();
         },
@@ -112,8 +115,8 @@ fn skipWhitespace(self: *Scanner) void {
             self.line += 1;
             _ = self.advance();
         },
-        '/' => if(self.peekNext() == '/') {
-            while(self.peek() != '\n' and !self.isAtEnd()) {
+        '/' => if (self.peekNext() == '/') {
+            while (self.peek() != '\n' and !self.isAtEnd()) {
                 _ = self.advance();
             }
         } else {
@@ -172,7 +175,7 @@ fn errorToken(self: *Scanner, msg: []const u8) Token {
 }
 
 fn string(self: *Scanner) Token {
-    while(self.peek() != '"' and !self.isAtEnd()) {
+    while (self.peek() != '"' and !self.isAtEnd()) {
         if (self.peek() == '\n') self.line += 1;
         _ = self.advance();
     }
@@ -187,17 +190,65 @@ fn isDigit(char: u8) bool {
 }
 
 fn number(self: *Scanner) Token {
-    while(isDigit(self.peek() orelse 'a')) { // Any non-digit will do
+    while (isDigit(self.peek() orelse '²')) { // Any non-digit will do
         _ = self.advance();
     }
 
-    if (self.peek() == '.' and isDigit(self.peekNext() orelse 'a')) {
+    if (self.peek() == '.' and isDigit(self.peekNext() orelse '²')) {
         _ = self.advance();
 
-        while (isDigit(self.peek() orelse 'a')) {
+        while (isDigit(self.peek() orelse '²')) {
             _ = self.advance();
         }
     }
 
     return self.makeToken(.NUMBER);
+}
+
+fn isAlpha(char: u8) bool {
+    return (char >= 'a' and char <= 'z' or char >= 'A' and char <= 'Z' or char == '_');
+}
+
+fn identifer(self: *Scanner) Token {
+    while (isAlpha(self.peek() orelse '²') or isDigit(self.peek() orelse '²')) {
+        _ = self.advance();
+    }
+    return self.makeToken(self.identifierType());
+}
+
+fn identifierType(self: *Scanner) TokenType {
+    const len = self.current - self.start;
+    if (len == 0) return .IDENTIFIER;
+    const word = self.start[0..len];
+    const word_rest = word[1..];
+
+    return switch (word[0]) {
+        'a' => checkKeyword(word_rest, "nd", .AND),
+        'c' => checkKeyword(word_rest, "lass", .CLASS),
+        'e' => checkKeyword(word_rest, "lse", .ELSE),
+        'i' => checkKeyword(word_rest, "f", .IF),
+        'n' => checkKeyword(word_rest, "il", .NIL),
+        'o' => checkKeyword(word_rest, "r", .OR),
+        'p' => checkKeyword(word_rest, "rint", .PRINT),
+        'r' => checkKeyword(word_rest, "eturn", .RETURN),
+        's' => checkKeyword(word_rest, "uper", .SUPER),
+        'v' => checkKeyword(word_rest, "ar", .VAR),
+        'w' => checkKeyword(word_rest, "hile", .WHILE),
+        'f' => if (len == 1) .IDENTIFIER else switch (word_rest[0]) {
+            'a' => checkKeyword(word_rest[1..], "lse", .FALSE),
+            'o' => checkKeyword(word_rest[1..], "r", .FOR),
+            'u' => checkKeyword(word_rest[1..], "n", .FUN),
+            else => .IDENTIFIER,
+        },
+        't' => if (len == 1) .IDENTIFIER else switch (word_rest[0]) {
+            'h' => checkKeyword(word_rest[1..], "is", .THIS),
+            'r' => checkKeyword(word_rest[1..], "ue", .TRUE),
+            else => .IDENTIFIER,
+        },
+        else => .IDENTIFIER,
+    };
+}
+
+fn checkKeyword(word: []const u8, keyword: []const u8, typ: TokenType) TokenType {
+    return if (std.mem.eql(u8, word, keyword)) typ else .IDENTIFIER;
 }

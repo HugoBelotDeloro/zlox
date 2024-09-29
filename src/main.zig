@@ -35,7 +35,6 @@ fn repl(allocator: std.mem.Allocator) !void {
             break;
         }
 
-        try stdout.print("line: {s}\n", .{line});
         _ = try executeSource(line, allocator);
     }
 }
@@ -58,8 +57,12 @@ fn runFile(path: []const u8, allocator: std.mem.Allocator) !Vm.InterpretResult {
 fn executeSource(source: []u8, allocator: std.mem.Allocator) !Vm.InterpretResult {
     const writer = std.io.getStdOut().writer().any();
     const bytecode = try Parser.compile(source, allocator);
-    const chunk = Chunk.from_bytecode(bytecode, allocator);
-    return Vm.interpret(&chunk, allocator, writer);
+    // defer allocator.free(bytecode);
+    var chunk = Chunk.from_bytecode(bytecode, allocator);
+    defer chunk.free();
+    _ = writer;
+    return Vm.InterpretResult.OK;
+    // return Vm.interpret(&chunk, allocator, writer);
 }
 
 fn simpleProgram(allocator: std.mem.Allocator) !void {

@@ -14,7 +14,7 @@
       pkgs = nixpkgs.legacyPackages.${system};
       zigpkg = zig.packages.x86_64-linux.master;
       zlspkg = zls.packages.x86_64-linux.zls;
-      buildInputs = [ zigpkg zlspkg ];
+      buildInputs = [ zigpkg zlspkg ] ++ (with pkgs; [ ]);
     in {
       devShells.${system}.default = pkgs.mkShell { inherit buildInputs; };
 

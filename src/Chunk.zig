@@ -1,10 +1,10 @@
 const std = @import("std");
-const values = @import("value.zig");
+const Value = @import("value.zig").Value;
 
 const Chunk = @This();
 
 code: std.ArrayList(u8),
-constants: values.ValueArray,
+constants: std.ArrayList(Value),
 lines: std.ArrayList(LineInfo),
 
 pub const OpCode = enum(u8) {
@@ -29,7 +29,7 @@ const LineInfo = struct {
 pub fn init(alloc: std.mem.Allocator) Chunk {
     return Chunk{
         .code = std.ArrayList(u8).init(alloc),
-        .constants = std.ArrayList(values.Value).init(alloc),
+        .constants = std.ArrayList(Value).init(alloc),
         .lines = std.ArrayList(LineInfo).init(alloc),
     };
 }
@@ -38,7 +38,7 @@ pub fn init(alloc: std.mem.Allocator) Chunk {
 pub fn from_bytecode(bytecode: []u8, allocator: std.mem.Allocator) Chunk {
     return Chunk{
         .code = std.ArrayList(u8).fromOwnedSlice(allocator, bytecode),
-        .constants = std.ArrayList(values.Value).init(allocator),
+        .constants = std.ArrayList(Value).init(allocator),
         .lines = std.ArrayList(LineInfo).init(allocator),
     };
 }
@@ -59,13 +59,13 @@ pub fn writeChunk(self: *Chunk, byte: u8, line: u32) !void {
 }
 
 /// Writes a constant to the static data and returns its index
-pub fn addConstant(self: *Chunk, value: values.Value) !usize {
+pub fn addConstant(self: *Chunk, value: Value) !usize {
     try self.constants.append(value);
     return self.constants.items.len - 1;
 }
 
 /// Inserts a constant in the static data and a constant opcode into the bytecode
-pub fn writeConstant(self: *Chunk, value: values.Value, line: u32) !void {
+pub fn writeConstant(self: *Chunk, value: Value, line: u32) !void {
     const constant_id = try self.addConstant(value);
 
     if (constant_id > 255) {

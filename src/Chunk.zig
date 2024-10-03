@@ -8,14 +8,14 @@ constants: std.ArrayList(Value),
 lines: std.ArrayList(LineInfo),
 
 pub const OpCode = enum(u8) {
-    OP_CONSTANT,
-    OP_CONSTANT_LONG,
-    OP_ADD,
-    OP_SUBTRACT,
-    OP_MULTIPLY,
-    OP_DIVIDE,
-    OP_NEGATE,
-    OP_RETURN,
+    Constant,
+    ConstantLong,
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    Negate,
+    Return,
     _,
 };
 
@@ -69,7 +69,7 @@ pub fn writeConstant(self: *Chunk, value: Value, line: u32) !void {
     const constant_id = try self.addConstant(value);
 
     if (constant_id > 255) {
-        try self.writeInstruction(OpCode.OP_CONSTANT_LONG, line);
+        try self.writeInstruction(OpCode.ConstantLong, line);
 
         const bytes = try self.code.addManyAt(self.code.items.len, 3);
         const constant_id_ptr = std.mem.bytesAsValue(u24, bytes);
@@ -77,7 +77,7 @@ pub fn writeConstant(self: *Chunk, value: Value, line: u32) !void {
         try self.updateLines(line, 3);
     } else {
         const byte: u8 = @intCast(constant_id);
-        try self.writeInstruction(OpCode.OP_CONSTANT, line);
+        try self.writeInstruction(OpCode.Constant, line);
         try self.writeChunk(byte, line);
     }
 }
@@ -125,6 +125,6 @@ test "long constants" {
         try chunk.writeConstant(@floatFromInt(i), 0);
     }
 
-    try std.testing.expect(chunk.code.items[chunk.code.items.len - 4] == @intFromEnum(OpCode.OP_CONSTANT_LONG));
-    try std.testing.expect(chunk.code.items[chunk.code.items.len - 6] == @intFromEnum(OpCode.OP_CONSTANT));
+    try std.testing.expect(chunk.code.items[chunk.code.items.len - 4] == @intFromEnum(OpCode.ConstantLong));
+    try std.testing.expect(chunk.code.items[chunk.code.items.len - 6] == @intFromEnum(OpCode.Constant));
 }

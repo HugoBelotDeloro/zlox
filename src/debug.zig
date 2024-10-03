@@ -22,9 +22,9 @@ pub fn disassembleInstruction(chunk: *const Chunk, offset: usize, writer: std.io
 
     const instruction: OpCode = @enumFromInt(chunk.code.items[offset]);
     return switch (instruction) {
-        .OP_RETURN, .OP_ADD, .OP_SUBTRACT, .OP_MULTIPLY, .OP_DIVIDE, .OP_NEGATE => simpleInstruction(instruction, offset, writer),
-        .OP_CONSTANT => constantInstruction(instruction, offset, writer, chunk),
-        .OP_CONSTANT_LONG => constantLongInstruction(offset, writer, chunk),
+        .Return, .Add, .Subtract, .Multiply, .Divide, .Negate => simpleInstruction(instruction, offset, writer),
+        .Constant => constantInstruction(instruction, offset, writer, chunk),
+        .ConstantLong => constantLongInstruction(offset, writer, chunk),
         _ => unknownOpcode(instruction, offset, writer),
     };
 }
@@ -40,7 +40,7 @@ fn constantInstruction(instruction: OpCode, offset: usize, writer: std.io.AnyWri
 fn constantLongInstruction(offset: usize, writer: std.io.AnyWriter, chunk: *const Chunk) !usize {
     const constant_id: u24 = std.mem.bytesAsValue(u24, &chunk.code.items[offset + 1]).*;
     const constant = chunk.constants.items[constant_id];
-    try writer.print("{s: <16} {d: >4} '{d}'\n", .{ @tagName(OpCode.OP_CONSTANT_LONG), constant_id, constant });
+    try writer.print("{s: <16} {d: >4} '{d}'\n", .{ @tagName(OpCode.ConstantLong), constant_id, constant });
 
     return offset + 4;
 }
@@ -60,8 +60,8 @@ test "disassembling" {
     var chunk = Chunk.init(alloc);
     defer chunk.free();
 
-    try chunk.writeInstruction(OpCode.OP_RETURN, 1);
-    try chunk.writeInstruction(OpCode.OP_RETURN, 2);
+    try chunk.writeInstruction(OpCode.Return, 1);
+    try chunk.writeInstruction(OpCode.Return, 2);
 
     var out = std.ArrayList(u8).init(alloc);
     defer out.deinit();
@@ -69,8 +69,8 @@ test "disassembling" {
 
     try std.testing.expect(std.mem.eql(u8, out.items,
         \\== test chunk ==
-        \\0000    1 OP_RETURN
-        \\0001    2 OP_RETURN
+        \\0000    1 Return
+        \\0001    2 Return
         \\
     ));
 }

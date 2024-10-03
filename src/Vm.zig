@@ -5,8 +5,8 @@ const Value = @import("value.zig").Value;
 
 const Vm = @This();
 
-const DEBUG_TRACE_EXECUTION = true and !@import("builtin").is_test;
-const STACK_BASE_SIZE = 1 << 8;
+const DebugTraceExecution = true and !@import("builtin").is_test;
+const StackBaseSize = 1 << 8;
 
 /// Not owned by Vm
 chunk: *const Chunk,
@@ -25,45 +25,45 @@ pub fn interpret(chunk: *const Chunk, allocator: std.mem.Allocator, writer: std.
 
 fn run(self: *Vm, writer: std.io.AnyWriter) !InterpretResult {
     while (true) {
-        if (DEBUG_TRACE_EXECUTION) {
+        if (DebugTraceExecution) {
             const stderr = std.io.getStdErr().writer().any();
             try self.printStack(stderr);
             _ = try @import("debug.zig").disassembleInstruction(self.chunk, self.ip - self.chunk.code.items.ptr, stderr);
         }
         switch (self.readInstruction()) {
-            .OP_RETURN => {
+            .Return => {
                 try writer.print("{d}\n", .{self.pop()});
-                return .OK;
+                return .Ok;
             },
-            .OP_CONSTANT => {
+            .Constant => {
                 const constant = self.readConstant();
                 try self.push(constant);
             },
-            .OP_CONSTANT_LONG => {
+            .ConstantLong => {
                 const constant = self.readConstantLong();
                 try self.push(constant);
             },
-            .OP_ADD => {
+            .Add => {
                 const r = self.pop();
                 const l = self.pop();
                 try self.push(l + r);
             },
-            .OP_SUBTRACT => {
+            .Subtract => {
                 const r = self.pop();
                 const l = self.pop();
                 try self.push(l - r);
             },
-            .OP_MULTIPLY => {
+            .Multiply => {
                 const r = self.pop();
                 const l = self.pop();
                 try self.push(l * r);
             },
-            .OP_DIVIDE => {
+            .Divide => {
                 const r = self.pop();
                 const l = self.pop();
                 try self.push(l / r);
             },
-            .OP_NEGATE => {
+            .Negate => {
                 try self.push(-self.pop());
             },
             else => {},
@@ -73,7 +73,7 @@ fn run(self: *Vm, writer: std.io.AnyWriter) !InterpretResult {
 }
 
 fn init(allocator: std.mem.Allocator, chunk: *const Chunk) !Vm {
-    const stack = try allocator.alloc(f64, STACK_BASE_SIZE);
+    const stack = try allocator.alloc(f64, StackBaseSize);
     return Vm{
         .chunk = chunk,
         .ip = chunk.code.items.ptr,
@@ -88,9 +88,9 @@ fn deinit(self: *Vm) void {
 }
 
 pub const InterpretResult = enum {
-    OK,
-    COMPILE_ERROR,
-    RUNTIME_ERROR,
+    Ok,
+    CompileError,
+    RuntimeError,
 };
 
 fn push(self: *Vm, value: Value) !void {

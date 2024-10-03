@@ -9,57 +9,56 @@ line: u32,
 
 pub const Token = struct {
     typ: TokenType,
-    start: [*]const u8,
-    length: usize,
+    lexeme: []const u8,
     line: u32,
 };
 
 pub const TokenType = enum {
     // Single-character tokens.
-    LEFT_PAREN,
-    RIGHT_PAREN,
-    LEFT_BRACE,
-    RIGHT_BRACE,
-    COMMA,
-    DOT,
-    MINUS,
-    PLUS,
-    SEMICOLON,
-    SLASH,
-    STAR,
+    LeftParen,
+    RightParen,
+    LeftBrace,
+    RightBrace,
+    Comma,
+    Dot,
+    Minus,
+    Plus,
+    Semicolon,
+    Slash,
+    Star,
     // One or two character tokens.
-    BANG,
-    BANG_EQUAL,
-    EQUAL,
-    EQUAL_EQUAL,
-    GREATER,
-    GREATER_EQUAL,
-    LESS,
-    LESS_EQUAL,
+    Bang,
+    BangEqual,
+    Equal,
+    EqualEqual,
+    Greater,
+    GreaterEqual,
+    Less,
+    LessEqual,
     // Literals.
-    IDENTIFIER,
-    STRING,
-    NUMBER,
+    Identifier,
+    String,
+    Number,
     // Keywords.
-    AND,
-    CLASS,
-    ELSE,
-    FALSE,
-    FOR,
-    FUN,
-    IF,
-    NIL,
-    OR,
-    PRINT,
-    RETURN,
-    SUPER,
-    THIS,
-    TRUE,
-    VAR,
-    WHILE,
+    And,
+    Class,
+    Else,
+    False,
+    For,
+    Fun,
+    If,
+    Nil,
+    Or,
+    Print,
+    Return,
+    Super,
+    This,
+    True,
+    Var,
+    While,
 
-    ERROR,
-    EOF,
+    Error,
+    Eof,
 };
 
 pub fn init(source: []const u8) Scanner {
@@ -71,11 +70,11 @@ pub fn init(source: []const u8) Scanner {
     };
 }
 
-pub fn next(self: *Scanner) !?Token {
+pub fn next(self: *Scanner) ?Token {
     self.skipWhitespace();
     self.start = self.current;
     if (self.isAtEnd()) {
-        return self.makeToken(.EOF);
+        return self.makeToken(.Eof);
     }
 
     const char = self.advance() orelse unreachable;
@@ -84,21 +83,21 @@ pub fn next(self: *Scanner) !?Token {
     if (isDigit(char)) return self.number();
 
     switch (char) {
-        '(' => return self.makeToken(.LEFT_PAREN),
-        ')' => return self.makeToken(.RIGHT_PAREN),
-        '{' => return self.makeToken(.LEFT_BRACE),
-        '}' => return self.makeToken(.RIGHT_BRACE),
-        ';' => return self.makeToken(.SEMICOLON),
-        ',' => return self.makeToken(.COMMA),
-        '.' => return self.makeToken(.DOT),
-        '-' => return self.makeToken(.MINUS),
-        '+' => return self.makeToken(.PLUS),
-        '/' => return self.makeToken(.SLASH),
-        '*' => return self.makeToken(.STAR),
-        '!' => return self.makeToken(if (self.match('=')) .BANG_EQUAL else .BANG),
-        '=' => return self.makeToken(if (self.match('=')) .EQUAL_EQUAL else .EQUAL),
-        '<' => return self.makeToken(if (self.match('=')) .LESS_EQUAL else .LESS),
-        '>' => return self.makeToken(if (self.match('=')) .GREATER_EQUAL else .GREATER),
+        '(' => return self.makeToken(.LeftParen),
+        ')' => return self.makeToken(.RightParen),
+        '{' => return self.makeToken(.LeftBrace),
+        '}' => return self.makeToken(.RightBrace),
+        ';' => return self.makeToken(.Semicolon),
+        ',' => return self.makeToken(.Comma),
+        '.' => return self.makeToken(.Dot),
+        '-' => return self.makeToken(.Minus),
+        '+' => return self.makeToken(.Plus),
+        '/' => return self.makeToken(.Slash),
+        '*' => return self.makeToken(.Star),
+        '!' => return self.makeToken(if (self.match('=')) .BangEqual else .Bang),
+        '=' => return self.makeToken(if (self.match('=')) .EqualEqual else .Equal),
+        '<' => return self.makeToken(if (self.match('=')) .LessEqual else .Less),
+        '>' => return self.makeToken(if (self.match('=')) .GreaterEqual else .Greater),
         '"' => return self.string(),
         else => {},
     }
@@ -157,19 +156,18 @@ fn isAtEnd(self: *Scanner) bool {
 }
 
 fn makeToken(self: *Scanner, typ: TokenType) Token {
+    const len = self.current - self.start;
     return Token{
         .typ = typ,
-        .start = self.start,
-        .length = self.current - self.start,
+        .lexeme = self.start[0..len],
         .line = self.line,
     };
 }
 
 fn errorToken(self: *Scanner, msg: []const u8) Token {
     return Token{
-        .typ = .ERROR,
-        .start = msg.ptr,
-        .length = msg.len,
+        .typ = .Error,
+        .lexeme = msg,
         .line = self.line,
     };
 }
@@ -182,7 +180,7 @@ fn string(self: *Scanner) Token {
 
     if (self.isAtEnd()) return self.errorToken("Unterminated string");
     _ = self.advance(); // Closing quote
-    return self.makeToken(.STRING);
+    return self.makeToken(.String);
 }
 
 fn isDigit(char: u8) bool {
@@ -202,7 +200,7 @@ fn number(self: *Scanner) Token {
         }
     }
 
-    return self.makeToken(.NUMBER);
+    return self.makeToken(.Number);
 }
 
 fn isAlpha(char: u8) bool {
@@ -218,37 +216,37 @@ fn identifer(self: *Scanner) Token {
 
 fn identifierType(self: *Scanner) TokenType {
     const len = self.current - self.start;
-    if (len == 0) return .IDENTIFIER;
+    if (len == 0) return .Identifier;
     const word = self.start[0..len];
     const word_rest = word[1..];
 
     return switch (word[0]) {
-        'a' => checkKeyword(word_rest, "nd", .AND),
-        'c' => checkKeyword(word_rest, "lass", .CLASS),
-        'e' => checkKeyword(word_rest, "lse", .ELSE),
-        'i' => checkKeyword(word_rest, "f", .IF),
-        'n' => checkKeyword(word_rest, "il", .NIL),
-        'o' => checkKeyword(word_rest, "r", .OR),
-        'p' => checkKeyword(word_rest, "rint", .PRINT),
-        'r' => checkKeyword(word_rest, "eturn", .RETURN),
-        's' => checkKeyword(word_rest, "uper", .SUPER),
-        'v' => checkKeyword(word_rest, "ar", .VAR),
-        'w' => checkKeyword(word_rest, "hile", .WHILE),
-        'f' => if (len == 1) .IDENTIFIER else switch (word_rest[0]) {
-            'a' => checkKeyword(word_rest[1..], "lse", .FALSE),
-            'o' => checkKeyword(word_rest[1..], "r", .FOR),
-            'u' => checkKeyword(word_rest[1..], "n", .FUN),
-            else => .IDENTIFIER,
+        'a' => checkKeyword(word_rest, "nd", .And),
+        'c' => checkKeyword(word_rest, "lass", .Class),
+        'e' => checkKeyword(word_rest, "lse", .Else),
+        'i' => checkKeyword(word_rest, "f", .If),
+        'n' => checkKeyword(word_rest, "il", .Nil),
+        'o' => checkKeyword(word_rest, "r", .Or),
+        'p' => checkKeyword(word_rest, "rint", .Print),
+        'r' => checkKeyword(word_rest, "eturn", .Return),
+        's' => checkKeyword(word_rest, "uper", .Super),
+        'v' => checkKeyword(word_rest, "ar", .Var),
+        'w' => checkKeyword(word_rest, "hile", .While),
+        'f' => if (len == 1) .Identifier else switch (word_rest[0]) {
+            'a' => checkKeyword(word_rest[1..], "lse", .False),
+            'o' => checkKeyword(word_rest[1..], "r", .For),
+            'u' => checkKeyword(word_rest[1..], "n", .Fun),
+            else => .Identifier,
         },
-        't' => if (len == 1) .IDENTIFIER else switch (word_rest[0]) {
-            'h' => checkKeyword(word_rest[1..], "is", .THIS),
-            'r' => checkKeyword(word_rest[1..], "ue", .TRUE),
-            else => .IDENTIFIER,
+        't' => if (len == 1) .Identifier else switch (word_rest[0]) {
+            'h' => checkKeyword(word_rest[1..], "is", .This),
+            'r' => checkKeyword(word_rest[1..], "ue", .True),
+            else => .Identifier,
         },
-        else => .IDENTIFIER,
+        else => .Identifier,
     };
 }
 
 fn checkKeyword(word: []const u8, keyword: []const u8, typ: TokenType) TokenType {
-    return if (std.mem.eql(u8, word, keyword)) typ else .IDENTIFIER;
+    return if (std.mem.eql(u8, word, keyword)) typ else .Identifier;
 }

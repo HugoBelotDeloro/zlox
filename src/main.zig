@@ -13,8 +13,8 @@ pub fn main() !void {
     if (argv.len == 1) {
         try repl(gpa.allocator());
     } else if (argv.len == 2) switch (try runFile(std.mem.span(argv[1]), gpa.allocator())) {
-        .COMPILE_ERROR => std.process.exit(65),
-        .RUNTIME_ERROR => std.process.exit(70),
+        .CompileError => std.process.exit(65),
+        .RuntimeError => std.process.exit(70),
         else => {},
     } else {
         _ = try std.io.getStdErr().write("Usage: zlox [path]\n");
@@ -39,12 +39,12 @@ fn repl(allocator: std.mem.Allocator) !void {
     }
 }
 
-const MAX_FILE_SIZE: usize = 1 << 32;
+const MaxFileSize: usize = 1 << 32;
 
 fn runFile(path: []const u8, allocator: std.mem.Allocator) !Vm.InterpretResult {
     if (std.fs.cwd().openFile(path, .{})) |file| {
         defer file.close();
-        const source = try file.readToEndAlloc(allocator, MAX_FILE_SIZE);
+        const source = try file.readToEndAlloc(allocator, MaxFileSize);
         defer allocator.free(source);
 
         return executeSource(source, allocator);
@@ -56,13 +56,10 @@ fn runFile(path: []const u8, allocator: std.mem.Allocator) !Vm.InterpretResult {
 
 fn executeSource(source: []u8, allocator: std.mem.Allocator) !Vm.InterpretResult {
     const writer = std.io.getStdOut().writer().any();
-    const bytecode = try Parser.compile(source, allocator);
-    // defer allocator.free(bytecode);
-    var chunk = Chunk.from_bytecode(bytecode, allocator);
+    var chunk = Chunk.init(allocator);
+    try Parser.compile(source, &chunk);
     defer chunk.free();
-    _ = writer;
-    return Vm.InterpretResult.OK;
-    // return Vm.interpret(&chunk, allocator, writer);
+    return Vm.interpret(&chunk, allocator, writer);
 }
 
 fn simpleProgram(allocator: std.mem.Allocator) !void {
@@ -71,10 +68,10 @@ fn simpleProgram(allocator: std.mem.Allocator) !void {
 
     try chunk.writeConstant(1.2, 0);
     try chunk.writeConstant(3.4, 1);
-    try chunk.writeInstruction(.OP_ADD, 2);
+    try chunk.writeInstruction(.Add, 2);
     try chunk.writeConstant(5.6, 3);
-    try chunk.writeInstruction(.OP_DIVIDE, 4);
-    try chunk.writeInstruction(.OP_RETURN, 5);
+    try chunk.writeInstruction(.Divide, 4);
+    try chunk.writeInstruction(.Return, 5);
 
     var stdout = std.io.getStdOut().writer();
 

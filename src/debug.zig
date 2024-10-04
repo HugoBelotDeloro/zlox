@@ -32,7 +32,7 @@ pub fn disassembleInstruction(chunk: *const Chunk, offset: usize, writer: std.io
 fn constantInstruction(instruction: OpCode, offset: usize, writer: std.io.AnyWriter, chunk: *const Chunk) !usize {
     const constant_id = chunk.code.items[offset + 1];
     const constant = chunk.constants.items[constant_id];
-    try writer.print("{s: <16} {d: >4} '{d}'\n", .{ @tagName(instruction), constant_id, constant });
+    try writer.print("{s: <16} {d: >4} '{}'\n", .{ @tagName(instruction), constant_id, constant });
 
     return offset + 2;
 }

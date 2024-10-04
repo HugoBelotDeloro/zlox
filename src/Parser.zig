@@ -160,7 +160,7 @@ fn endCompiler(self: *Parser) !void {
 
 fn number(self: *Parser) Error!void {
     const value = try std.fmt.parseFloat(f64, self.previous.lexeme);
-    return self.emitConstant(value);
+    return self.emitConstant(Value { .Number = value, });
 }
 
 fn grouping(self: *Parser) Error!void {

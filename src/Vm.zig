@@ -8,6 +8,10 @@ const Vm = @This();
 const DebugTraceExecution = true and !@import("builtin").is_test;
 const StackBaseSize = 1 << 8;
 
+const Error = error {
+    NotANumber,
+};
+
 /// Not owned by Vm
 chunk: *const Chunk,
 ip: [*]u8,
@@ -30,7 +34,8 @@ fn run(self: *Vm, writer: std.io.AnyWriter) !InterpretResult {
             try self.printStack(stderr);
             _ = try @import("debug.zig").disassembleInstruction(self.chunk, self.ip - self.chunk.code.items.ptr, stderr);
         }
-        switch (self.readInstruction()) {
+
+        try switch (self.readInstruction()) {
             .Return => {
                 try writer.print("{d}\n", .{self.pop()});
                 return .Ok;
@@ -43,37 +48,54 @@ fn run(self: *Vm, writer: std.io.AnyWriter) !InterpretResult {
                 const constant = self.readConstantLong();
                 try self.push(constant);
             },
-            .Add => {
-                const r = self.pop();
-                const l = self.pop();
-                try self.push(l + r);
+            .Add => switch (self.pop()) {
+                .Number => |r| switch (self.pop()) {
+                    .Number => |l| {
+                        try self.push(Value.number(l + r));
+                    },
+                    else => Error.NotANumber,
+                },
+                else => Error.NotANumber,
             },
-            .Subtract => {
-                const r = self.pop();
-                const l = self.pop();
-                try self.push(l - r);
+            .Subtract => switch (self.pop()) {
+                .Number => |r| switch (self.pop()) {
+                    .Number => |l| {
+                        try self.push(Value.number(l - r));
+                    },
+                    else => Error.NotANumber,
+                },
+                else => Error.NotANumber,
             },
-            .Multiply => {
-                const r = self.pop();
-                const l = self.pop();
-                try self.push(l * r);
+            .Multiply => switch (self.pop()) {
+                .Number => |r| switch (self.pop()) {
+                    .Number => |l| {
+                        try self.push(Value.number(l * r));
+                    },
+                    else => Error.NotANumber,
+                },
+                else => Error.NotANumber,
             },
-            .Divide => {
-                const r = self.pop();
-                const l = self.pop();
-                try self.push(l / r);
+            .Divide => switch (self.pop()) {
+                .Number => |r| switch (self.pop()) {
+                    .Number => |l| {
+                        try self.push(Value.number(l / r));
+                    },
+                    else => Error.NotANumber,
+                },
+                else => Error.NotANumber,
             },
-            .Negate => {
-                try self.push(-self.pop());
+            .Negate => switch(self.pop()) {
+                .Number => |value| try self.push(Value.number(-value)),
+                else => Error.NotANumber,
             },
             else => {},
-        }
+        };
     }
     unreachable;
 }
 
 fn init(allocator: std.mem.Allocator, chunk: *const Chunk) !Vm {
-    const stack = try allocator.alloc(f64, StackBaseSize);
+    const stack = try allocator.alloc(Value, StackBaseSize);
     return Vm{
         .chunk = chunk,
         .ip = chunk.code.items.ptr,

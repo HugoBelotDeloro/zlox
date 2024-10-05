@@ -118,8 +118,9 @@ pub const InterpretResult = enum {
 fn push(self: *Vm, value: Value) !void {
     const stack_size = self.stack_top - self.stack.ptr;
     if (stack_size == self.stack.len) {
-        const new_stack = try self.allocator.realloc(self.stack, stack_size * 2);
-        std.mem.copyForwards(Value, new_stack, self.stack);
+        const index = self.stackIndex();
+        self.stack = try self.allocator.realloc(self.stack, stack_size * 2);
+        self.stack_top = self.stack.ptr + index;
     }
     self.stack_top[0] = value;
     self.stack_top += 1;
@@ -155,4 +156,8 @@ fn printStack(self: *Vm, writer: std.io.AnyWriter) !void {
         _ = try writer.print("[ {d} ]", .{slot[0]});
     }
     _ = try writer.write("\n");
+}
+
+fn stackIndex(self: *Vm) usize {
+    return self.stack_top - self.stack.ptr;
 }

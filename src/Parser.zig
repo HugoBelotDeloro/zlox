@@ -56,7 +56,7 @@ const ParseRule = struct {
         .Semicolon = .{ .prefix = null, .infix = null, .precedence = .None },
         .Slash = .{ .prefix = null, .infix = binary, .precedence = .Factor },
         .Star = .{ .prefix = null, .infix = binary, .precedence = .Factor },
-        .Bang = .{ .prefix = null, .infix = null, .precedence = .None },
+        .Bang = .{ .prefix = unary, .infix = null, .precedence = .None },
         .BangEqual = .{ .prefix = null, .infix = null, .precedence = .None },
         .Equal = .{ .prefix = null, .infix = null, .precedence = .None },
         .EqualEqual = .{ .prefix = null, .infix = null, .precedence = .None },
@@ -176,6 +176,7 @@ fn unary(self: *Parser) Error!void {
 
     switch (operator) {
         .Minus => try self.emitInstruction(.Negate),
+        .Bang => try self.emitInstruction(.Not),
         else => unreachable,
     }
 }

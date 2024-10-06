@@ -68,10 +68,11 @@ fn run(self: *Vm, writer: std.io.AnyWriter) !InterpretResult {
             .Subtract => self.binary(.Number, .Sub, Error.NotANumber),
             .Multiply => self.binary(.Number, .Mul, Error.NotANumber),
             .Divide => self.binary(.Number, .Div, Error.NotANumber),
+            .Not => self.push(Value.boolean(isFalsey(self.pop()))),
             .Negate => switch (self.peek(0)) {
-                .Number => |value| {
+                .Number => |f| {
                     _ = self.pop();
-                    try self.push(Value.number(-value));
+                    try self.push(Value.number(-f));
                 },
                 else => Error.NotANumber,
             },
@@ -138,6 +139,14 @@ fn readConstantLong(self: *Vm) Value {
 
 fn peek(self: *Vm, n: usize) Value {
     return (self.stack_top - 1 - n)[0];
+}
+
+fn isFalsey(value: Value) bool {
+    return switch (value) {
+        .Bool => |b| !b,
+        .Nil => true,
+        else => false,
+    };
 }
 
 fn printStack(self: *Vm, writer: std.io.AnyWriter) !void {

@@ -6,15 +6,19 @@ pub const Value = union(enum) {
     Number: f64,
 
     pub fn boolean(b: bool) Value {
-        return .{ .Bool = b, };
+        return .{
+            .Bool = b,
+        };
     }
 
     pub fn nil() Value {
-        return .{ .nil, };
+        return Value.Nil;
     }
 
     pub fn number(n: f64) Value {
-        return .{ .Number = n, };
+        return .{
+            .Number = n,
+        };
     }
 
     pub fn any(val: anytype) Value {

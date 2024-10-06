@@ -8,7 +8,7 @@ const Vm = @This();
 const DebugTraceExecution = true and !@import("builtin").is_test;
 const StackBaseSize = 1 << 8;
 
-const Error = error {
+const Error = error{
     NotANumber,
 };
 
@@ -33,10 +33,7 @@ pub fn interpret(chunk: *const Chunk, allocator: std.mem.Allocator, writer: std.
 
     return vm.run(writer) catch |err| {
         if (errorString(err)) |msg| {
-            _ = try writer.print("{s}\n[line {d} in script]\n", .{
-                msg,
-                vm.chunk.getLine(vm.instructionIndex())
-            });
+            _ = try writer.print("{s}\n[line {d} in script]\n", .{ msg, vm.chunk.getLine(vm.instructionIndex()) });
         }
         vm.resetStack();
         return error.RuntimeError;
@@ -64,11 +61,14 @@ fn run(self: *Vm, writer: std.io.AnyWriter) !InterpretResult {
                 const constant = self.readConstantLong();
                 try self.push(constant);
             },
+            .Nil => self.push(Value.nil()),
+            .True => self.push(Value.boolean(true)),
+            .False => self.push(Value.boolean(false)),
             .Add => self.binary(.Number, .Add, Error.NotANumber),
             .Subtract => self.binary(.Number, .Sub, Error.NotANumber),
             .Multiply => self.binary(.Number, .Mul, Error.NotANumber),
             .Divide => self.binary(.Number, .Div, Error.NotANumber),
-            .Negate => switch(self.peek(0)) {
+            .Negate => switch (self.peek(0)) {
                 .Number => |value| {
                     _ = self.pop();
                     try self.push(Value.number(-value));
@@ -169,7 +169,7 @@ const BinOp = enum {
 };
 
 fn binary(self: *Vm, comptime typ: std.meta.Tag(Value), comptime op: BinOp, comptime err: Error) !void {
-    return switch (self.peek(0)) {
+    try switch (self.peek(0)) {
         typ => |r| switch (self.peek(1)) {
             typ => |l| {
                 _ = self.pop();

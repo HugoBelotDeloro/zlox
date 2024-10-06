@@ -70,17 +70,17 @@ const ParseRule = struct {
         .And = .{ .prefix = null, .infix = null, .precedence = .None },
         .Class = .{ .prefix = null, .infix = null, .precedence = .None },
         .Else = .{ .prefix = null, .infix = null, .precedence = .None },
-        .False = .{ .prefix = null, .infix = null, .precedence = .None },
+        .False = .{ .prefix = @"false", .infix = null, .precedence = .None },
         .For = .{ .prefix = null, .infix = null, .precedence = .None },
         .Fun = .{ .prefix = null, .infix = null, .precedence = .None },
         .If = .{ .prefix = null, .infix = null, .precedence = .None },
-        .Nil = .{ .prefix = null, .infix = null, .precedence = .None },
+        .Nil = .{ .prefix = nil, .infix = null, .precedence = .None },
         .Or = .{ .prefix = null, .infix = null, .precedence = .None },
         .Print = .{ .prefix = null, .infix = null, .precedence = .None },
         .Return = .{ .prefix = null, .infix = null, .precedence = .None },
         .Super = .{ .prefix = null, .infix = null, .precedence = .None },
         .This = .{ .prefix = null, .infix = null, .precedence = .None },
-        .True = .{ .prefix = null, .infix = null, .precedence = .None },
+        .True = .{ .prefix = @"true", .infix = null, .precedence = .None },
         .Var = .{ .prefix = null, .infix = null, .precedence = .None },
         .While = .{ .prefix = null, .infix = null, .precedence = .None },
         .Error = .{ .prefix = null, .infix = null, .precedence = .None },
@@ -160,7 +160,9 @@ fn endCompiler(self: *Parser) !void {
 
 fn number(self: *Parser) Error!void {
     const value = try std.fmt.parseFloat(f64, self.previous.lexeme);
-    return self.emitConstant(Value { .Number = value, });
+    return self.emitConstant(Value{
+        .Number = value,
+    });
 }
 
 fn grouping(self: *Parser) Error!void {
@@ -191,6 +193,18 @@ fn binary(self: *Parser) !void {
         .Slash => self.emitInstruction(.Divide),
         else => unreachable,
     };
+}
+
+fn nil(self: *Parser) !void {
+    try self.emitInstruction(.Nil);
+}
+
+fn @"true"(self: *Parser) !void {
+    try self.emitInstruction(.True);
+}
+
+fn @"false"(self: *Parser) !void {
+    try self.emitInstruction(.False);
 }
 
 fn expression(self: *Parser) !void {

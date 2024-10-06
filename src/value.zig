@@ -17,6 +17,15 @@ pub const Value = union(enum) {
         return .{ .Number = n, };
     }
 
+    pub fn any(val: anytype) Value {
+        return switch (@TypeOf(val)) {
+            inline f64 => Value.number(val),
+            inline bool => Value.boolean(val),
+            inline void => Value.nil(),
+            else => @compileError("Invalid type for value"),
+        };
+    }
+
     pub fn format(value: Value, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
         _ = fmt;
         _ = options;

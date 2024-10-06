@@ -30,6 +30,23 @@ pub const Value = union(enum) {
         };
     }
 
+    pub fn eql(a: Value, b: Value) bool {
+        return switch (a) {
+            .Nil => switch (b) {
+                .Nil => true,
+                else => false,
+            },
+            .Number => |na| switch (b) {
+                .Number => |nb| na == nb,
+                else => false,
+            },
+            .Bool => |ba| switch (b) {
+                .Bool => |bb| ba == bb,
+                else => false,
+            },
+        };
+    }
+
     pub fn format(value: Value, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
         _ = fmt;
         _ = options;

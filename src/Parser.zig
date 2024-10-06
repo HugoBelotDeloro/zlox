@@ -57,13 +57,13 @@ const ParseRule = struct {
         .Slash = .{ .prefix = null, .infix = binary, .precedence = .Factor },
         .Star = .{ .prefix = null, .infix = binary, .precedence = .Factor },
         .Bang = .{ .prefix = unary, .infix = null, .precedence = .None },
-        .BangEqual = .{ .prefix = null, .infix = null, .precedence = .None },
+        .BangEqual = .{ .prefix = binary, .infix = null, .precedence = .None },
         .Equal = .{ .prefix = null, .infix = null, .precedence = .None },
-        .EqualEqual = .{ .prefix = null, .infix = null, .precedence = .None },
-        .Greater = .{ .prefix = null, .infix = null, .precedence = .None },
-        .GreaterEqual = .{ .prefix = null, .infix = null, .precedence = .None },
-        .Less = .{ .prefix = null, .infix = null, .precedence = .None },
-        .LessEqual = .{ .prefix = null, .infix = null, .precedence = .None },
+        .EqualEqual = .{ .prefix = null, .infix = binary, .precedence = .Equality },
+        .Greater = .{ .prefix = null, .infix = binary, .precedence = .Comparison },
+        .GreaterEqual = .{ .prefix = null, .infix = binary, .precedence = .Comparison },
+        .Less = .{ .prefix = null, .infix = binary, .precedence = .Comparison },
+        .LessEqual = .{ .prefix = null, .infix = binary, .precedence = .Comparison },
         .Identifier = .{ .prefix = null, .infix = null, .precedence = .None },
         .String = .{ .prefix = null, .infix = null, .precedence = .None },
         .Number = .{ .prefix = number, .infix = null, .precedence = .None },
@@ -137,6 +137,12 @@ fn emitInstruction(self: *Parser, instr: OpCode) !void {
     return self.chunk.writeInstruction(instr, self.previous.line);
 }
 
+fn emitInstructions(self: *Parser, comptime instructions: anytype) !void {
+    inline for (instructions) |instruction| {
+        try self.emitInstruction(instruction);
+    }
+}
+
 fn emitConstant(self: *Parser, constant: Value) !void {
     return self.chunk.writeConstant(constant, self.previous.line);
 }
@@ -188,6 +194,12 @@ fn binary(self: *Parser) !void {
     try self.parsePrecedence(@enumFromInt(@intFromEnum(rule.precedence) + 1));
 
     try switch (operator) {
+        .BangEqual => self.emitInstructions(.{ .Equal, .Not }),
+        .EqualEqual => self.emitInstruction(.Equal),
+        .Greater => self.emitInstruction(.Greater),
+        .GreaterEqual => self.emitInstructions(.{ .Less, .Not }),
+        .Less => self.emitInstruction(.Less),
+        .LessEqual => self.emitInstructions(.{ .Greater, .Not }),
         .Plus => self.emitInstruction(.Add),
         .Minus => self.emitInstruction(.Subtract),
         .Star => self.emitInstruction(.Multiply),

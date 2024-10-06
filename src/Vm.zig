@@ -64,6 +64,13 @@ fn run(self: *Vm, writer: std.io.AnyWriter) !InterpretResult {
             .Nil => self.push(Value.nil()),
             .True => self.push(Value.boolean(true)),
             .False => self.push(Value.boolean(false)),
+            .Equal => {
+                const b = self.pop();
+                const a = self.pop();
+                try self.push(Value.boolean(a.eql(b)));
+            },
+            .Greater => self.binary(.Number, .Gre, Error.NotANumber),
+            .Less => self.binary(.Number, .Les, Error.NotANumber),
             .Add => self.binary(.Number, .Add, Error.NotANumber),
             .Subtract => self.binary(.Number, .Sub, Error.NotANumber),
             .Multiply => self.binary(.Number, .Mul, Error.NotANumber),
@@ -171,6 +178,8 @@ fn resetStack(self: *Vm) void {
 }
 
 const BinOp = enum {
+    Gre,
+    Les,
     Add,
     Sub,
     Mul,
@@ -184,6 +193,8 @@ fn binary(self: *Vm, comptime typ: std.meta.Tag(Value), comptime op: BinOp, comp
                 _ = self.pop();
                 _ = self.pop();
                 try self.push(Value.any(switch (op) {
+                    inline .Gre => l > r,
+                    inline .Les => l < r,
                     inline .Add => l + r,
                     inline .Sub => l - r,
                     inline .Mul => l * r,

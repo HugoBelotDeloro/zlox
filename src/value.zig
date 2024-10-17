@@ -5,7 +5,7 @@ pub const Value = union(enum) {
     Bool: bool,
     Nil,
     Number: f64,
-    Obj: Obj.Ptr,
+    Obj: *Obj,
 
     pub fn boolean(b: bool) Value {
         return .{
@@ -23,7 +23,7 @@ pub const Value = union(enum) {
         };
     }
 
-    pub fn obj(o: Obj.Ptr) Value {
+    pub fn obj(o: *Obj) Value {
         return .{
             .Obj = o,
         };
@@ -34,7 +34,7 @@ pub const Value = union(enum) {
             inline f64 => Value.number(val),
             inline bool => Value.boolean(val),
             inline void => Value.nil(),
-            inline Obj.Ptr => Value.obj(val),
+            inline *Obj => Value.obj(val),
             else => @compileError("Invalid type for value"),
         };
     }
@@ -53,7 +53,10 @@ pub const Value = union(enum) {
                 .Bool => |bb| ba == bb,
                 else => false,
             },
-            .Obj => false,
+            .Obj => |oa| switch (b) {
+                .Obj => |ob| oa.eql(ob),
+                else => false,
+            },
         };
     }
 

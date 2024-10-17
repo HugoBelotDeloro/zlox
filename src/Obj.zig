@@ -1,9 +1,7 @@
 const std = @import("std");
 const Obj = @This();
 
-pub const Ptr = *align(16) Obj;
-
-const ObjType = enum(u8) {
+const ObjType = enum {
     String,
 };
 
@@ -15,14 +13,25 @@ pub fn ObjTypeOf(comptime typ: ObjType) type {
     };
 }
 
-const ObjString = packed struct {
-    obj: ObjType = .String,
-    str: [*]const u8,
-    len: usize,
+const ObjString = struct {
+    obj: Obj = Obj{ .typ = .String },
+    str: []const u8,
+
+    pub fn format(
+        str: ObjString,
+        comptime fmt: []const u8,
+        options: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        _ = fmt;
+        _ = options;
+
+        try writer.print("\"{s}\"", .{str.str});
+    }
 };
 
-pub fn asObj(o: anytype) Obj.Ptr {
-    return @ptrCast(o);
+pub fn asObj(o: anytype) *Obj {
+    return &o.obj;
 }
 
 pub fn copyString(buf: []const u8, alloc: std.mem.Allocator) !*ObjString {
@@ -33,27 +42,19 @@ pub fn copyString(buf: []const u8, alloc: std.mem.Allocator) !*ObjString {
 
 fn allocateString(chars: []const u8, alloc: std.mem.Allocator) !*ObjString {
     const str = try allocateObject(.String, alloc);
-    str.str = chars.ptr;
-    str.len = chars.len;
+    str.str = chars;
 
     return str;
 }
 
 fn allocateObject(comptime typ: ObjType, alloc: std.mem.Allocator) !*ObjTypeOf(typ) {
     const obj = try alloc.create(ObjTypeOf(typ));
-    obj.obj = typ;
+    obj.obj = Obj{ .typ = typ };
     return obj;
 }
 
-pub fn asString(self: Obj.Ptr) ?[]const u8 {
-    return switch (self.typ) {
-        .String => @as(ObjString, @fieldParentPtr("obj", self)).str,
-        else => null,
-    };
-}
-
 pub fn format(
-    obj: Obj.Ptr,
+    obj: *Obj,
     comptime fmt: []const u8,
     options: std.fmt.FormatOptions,
     writer: anytype,
@@ -61,10 +62,15 @@ pub fn format(
     _ = fmt;
     _ = options;
 
-    return switch (obj.typ) {
-        .String => {
-            const str: *ObjString = @ptrCast(obj);
-            _ = try writer.print("\"{s}\"", .{str.str[0..str.len]});
-        },
-    };
+    inline for (comptime std.enums.values(ObjType)) |obj_typ| {
+        const typ = ObjTypeOf(obj_typ);
+        const o = @as(*typ, @alignCast(@fieldParentPtr("obj", obj)));
+        try writer.print("{}", .{o});
+    }
+}
+
+pub fn eql(a: Obj, b: *Obj) bool {
+    _ = a;
+    _ = b;
+    return false;
 }

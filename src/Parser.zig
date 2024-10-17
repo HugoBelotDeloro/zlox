@@ -5,6 +5,7 @@ const TokenType = Scanner.TokenType;
 const Chunk = @import("Chunk.zig");
 const OpCode = Chunk.OpCode;
 const Value = @import("value.zig").Value;
+const Obj = @import("Obj.zig");
 
 const Parser = @This();
 
@@ -24,6 +25,8 @@ scanner: Scanner,
 chunk: *Chunk,
 had_error: bool = false,
 panic_mode: bool = false,
+
+alloc: std.mem.Allocator,
 
 const Precedence = enum {
     None,
@@ -65,7 +68,7 @@ const ParseRule = struct {
         .Less = .{ .prefix = null, .infix = binary, .precedence = .Comparison },
         .LessEqual = .{ .prefix = null, .infix = binary, .precedence = .Comparison },
         .Identifier = .{ .prefix = null, .infix = null, .precedence = .None },
-        .String = .{ .prefix = null, .infix = null, .precedence = .None },
+        .String = .{ .prefix = string, .infix = null, .precedence = .None },
         .Number = .{ .prefix = number, .infix = null, .precedence = .None },
         .And = .{ .prefix = null, .infix = null, .precedence = .None },
         .Class = .{ .prefix = null, .infix = null, .precedence = .None },
@@ -88,17 +91,18 @@ const ParseRule = struct {
     });
 };
 
-fn init(source: []const u8, chunk: *Chunk) Parser {
+fn init(source: []const u8, chunk: *Chunk, alloc: std.mem.Allocator) Parser {
     return Parser{
         .scanner = Scanner.init(source),
         .chunk = chunk,
         .previous = undefined,
         .current = undefined,
+        .alloc = alloc,
     };
 }
 
-pub fn compile(source: []const u8, chunk: *Chunk) !void {
-    var self = Parser.init(source, chunk);
+pub fn compile(source: []const u8, chunk: *Chunk, alloc: std.mem.Allocator) !void {
+    var self = Parser.init(source, chunk, alloc);
 
     try self.advance();
     self.expression() catch |err| try reportError(error_token.?, @errorName(err), std.io.getStdErr().writer().any());
@@ -169,6 +173,13 @@ fn number(self: *Parser) Error!void {
     return self.emitConstant(Value{
         .Number = value,
     });
+}
+
+fn string(self: *Parser) Error!void {
+    const str = self.previous.lexeme[1 .. self.previous.lexeme.len - 1];
+    const str_obj = try Obj.copyString(str, self.alloc);
+    const obj = Value.obj(Obj.asObj(str_obj));
+    try self.chunk.writeConstant(obj, self.previous.line);
 }
 
 fn grouping(self: *Parser) Error!void {

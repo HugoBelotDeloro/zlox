@@ -1,9 +1,11 @@
 const std = @import("std");
+const Obj = @import("Obj.zig");
 
 pub const Value = union(enum) {
     Bool: bool,
     Nil,
     Number: f64,
+    Obj: Obj.Ptr,
 
     pub fn boolean(b: bool) Value {
         return .{
@@ -21,11 +23,18 @@ pub const Value = union(enum) {
         };
     }
 
+    pub fn obj(o: Obj.Ptr) Value {
+        return .{
+            .Obj = o,
+        };
+    }
+
     pub fn any(val: anytype) Value {
         return switch (@TypeOf(val)) {
             inline f64 => Value.number(val),
             inline bool => Value.boolean(val),
             inline void => Value.nil(),
+            inline Obj.Ptr => Value.obj(val),
             else => @compileError("Invalid type for value"),
         };
     }
@@ -44,6 +53,7 @@ pub const Value = union(enum) {
                 .Bool => |bb| ba == bb,
                 else => false,
             },
+            .Obj => false,
         };
     }
 
@@ -55,6 +65,7 @@ pub const Value = union(enum) {
             .Bool => |b| writer.print("{any}", .{b}),
             .Nil => writer.print("nil", .{}),
             .Number => |n| writer.print("{d}", .{n}),
+            .Obj => |o| writer.print("{any}", .{o}),
         };
     }
 };

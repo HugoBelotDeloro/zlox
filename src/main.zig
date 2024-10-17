@@ -57,7 +57,7 @@ fn runFile(path: []const u8, allocator: std.mem.Allocator) !Vm.InterpretResult {
 fn executeSource(source: []u8, allocator: std.mem.Allocator) !Vm.InterpretResult {
     const writer = std.io.getStdOut().writer().any();
     var chunk = Chunk.init(allocator);
-    try Parser.compile(source, &chunk);
+    try Parser.compile(source, &chunk, allocator);
     defer chunk.free();
     return Vm.interpret(&chunk, allocator, writer);
 }

@@ -28,10 +28,19 @@ const ObjString = struct {
 
         try writer.print("\"{s}\"", .{str.str});
     }
+
+    pub fn eql(a: *ObjString, b: *ObjString) bool {
+        return std.mem.eql(u8, a.str, b.str);
+    }
 };
 
 pub fn asObj(o: anytype) *Obj {
     return &o.obj;
+}
+
+pub fn asString(self: *Obj) ?*ObjString {
+    if (self.typ == .String) return @as(*ObjString, @alignCast(@fieldParentPtr("typ", self)));
+    return null;
 }
 
 pub fn copyString(buf: []const u8, alloc: std.mem.Allocator) !*ObjString {
@@ -69,8 +78,14 @@ pub fn format(
     }
 }
 
-pub fn eql(a: Obj, b: *Obj) bool {
-    _ = a;
-    _ = b;
-    return false;
+pub fn eql(a: *Obj, b: *Obj) bool {
+    if (a.typ != b.typ) return false;
+
+    switch (a.typ) {
+        inline .String => {
+            const oa = @as(*ObjString, @alignCast(@fieldParentPtr("obj", a)));
+            const ob = @as(*ObjString, @alignCast(@fieldParentPtr("obj", b)));
+            return oa.eql(ob);
+        },
+    }
 }

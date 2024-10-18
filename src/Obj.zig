@@ -30,7 +30,7 @@ const ObjString = struct {
         return as_u8 + @sizeOf(ObjString);
     }
 
-    pub fn getStringMut(self: *ObjString) []u8 {
+    fn getStringMut(self: *ObjString) []u8 {
         return self.getStringPtrMut()[0..self.len];
     }
 
@@ -74,8 +74,11 @@ pub fn fromCopy(str: []u8, alloc: std.mem.Allocator) !*Obj {
     return str_obj.getObj();
 }
 
-pub fn withSize(len: usize, alloc: std.mem.Allocator) !*ObjString {
-    return allocateString(len, alloc);
+pub fn withFn(init: fn (buf: []u8, data: *const anyopaque) void, data: *const anyopaque, len: usize, alloc: std.mem.Allocator) !*ObjString {
+    const str_obj = try allocateString(len, alloc);
+    init(str_obj.getStringMut(), data);
+
+    return str_obj;
 }
 
 fn allocateString(buf_size: usize, alloc: std.mem.Allocator) !*ObjString {

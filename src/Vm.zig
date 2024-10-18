@@ -221,12 +221,30 @@ fn binary(self: *Vm, comptime typ: std.meta.Tag(Value), comptime op: BinOp, comp
 fn concat(self: *Vm, a: *Obj, b: *Obj) !*Obj {
     if (a.asString()) |str_a| {
         if (b.asString()) |str_b| {
+            const Args = struct {
+                a: []const u8,
+                b: []const u8,
+
+                fn copySlices(buf: []u8, data: *const anyopaque) void {
+                    const args: *const @This() = @ptrCast(@alignCast(data));
+                    const slice_a = args.a;
+                    const slice_b = args.b;
+                    @memcpy(buf[0..slice_a.len], slice_a);
+                    @memcpy(buf[slice_a.len..], slice_b);
+                }
+            };
+
             const slice_a = str_a.getString();
             const slice_b = str_b.getString();
-            const str_c = try Obj.withSize(slice_a.len + slice_b.len, self.allocator);
-            const slice_c = str_c.getStringMut();
-            @memcpy(slice_c[0..slice_a.len], slice_a);
-            @memcpy(slice_c[slice_a.len..], slice_b);
+
+            const args = Args{
+                .a = slice_a,
+                .b = slice_b,
+            };
+
+            const len = slice_a.len + slice_b.len;
+
+            const str_c = try Obj.withFn(Args.copySlices, @ptrCast(&args), len, self.allocator);
             return str_c.getObj();
         }
     }

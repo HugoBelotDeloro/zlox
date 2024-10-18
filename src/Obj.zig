@@ -39,7 +39,7 @@ pub fn asObj(o: anytype) *Obj {
 }
 
 pub fn asString(self: *Obj) ?*ObjString {
-    if (self.typ == .String) return @as(*ObjString, @alignCast(@fieldParentPtr("typ", self)));
+    if (self.typ == .String) return @as(*ObjString, @alignCast(@fieldParentPtr("obj", self)));
     return null;
 }
 
@@ -47,6 +47,12 @@ pub fn copyString(buf: []const u8, alloc: std.mem.Allocator) !*ObjString {
     const chars = try alloc.alloc(u8, buf.len);
     @memcpy(chars, buf);
     return try allocateString(chars, alloc);
+}
+
+pub fn string(str: []u8, alloc: std.mem.Allocator) !*Obj {
+    const str_obj = try allocateString(str, alloc);
+
+    return &str_obj.obj;
 }
 
 fn allocateString(chars: []const u8, alloc: std.mem.Allocator) !*ObjString {

@@ -2,6 +2,7 @@ const std = @import("std");
 const Chunk = @import("Chunk.zig");
 const OpCode = Chunk.OpCode;
 const Value = @import("value.zig").Value;
+const Obj = @import("Obj.zig");
 
 const Vm = @This();
 
@@ -10,6 +11,8 @@ const StackBaseSize = 1 << 8;
 
 const Error = error{
     NotANumber,
+    NotAString,
+    NotANumberOrString,
 };
 
 fn errorString(err: anyerror) ?[]const u8 {
@@ -71,7 +74,13 @@ fn run(self: *Vm, writer: std.io.AnyWriter) !InterpretResult {
             },
             .Greater => self.binary(.Number, .Gre, Error.NotANumber),
             .Less => self.binary(.Number, .Les, Error.NotANumber),
-            .Add => self.binary(.Number, .Add, Error.NotANumber),
+            .Add => {
+                try switch (self.peek(0)) {
+                    .Number => self.binary(.Number, .Add, Error.NotANumber),
+                    .Obj => self.binary(.Obj, .Cat, Error.NotAString),
+                    else => Error.NotANumberOrString,
+                };
+            },
             .Subtract => self.binary(.Number, .Sub, Error.NotANumber),
             .Multiply => self.binary(.Number, .Mul, Error.NotANumber),
             .Divide => self.binary(.Number, .Div, Error.NotANumber),
@@ -184,6 +193,7 @@ const BinOp = enum {
     Sub,
     Mul,
     Div,
+    Cat,
 };
 
 fn binary(self: *Vm, comptime typ: std.meta.Tag(Value), comptime op: BinOp, comptime err: Error) !void {
@@ -199,10 +209,25 @@ fn binary(self: *Vm, comptime typ: std.meta.Tag(Value), comptime op: BinOp, comp
                     inline .Sub => l - r,
                     inline .Mul => l * r,
                     inline .Div => l / r,
+                    inline .Cat => try self.concat(l, r),
                 }));
             },
             else => err,
         },
         else => err,
     };
+}
+
+fn concat(self: *Vm, a: *Obj, b: *Obj) !*Obj {
+    if (a.asString()) |str_a| {
+        if (b.asString()) |str_b| {
+            const str_c = try self.allocator.alloc(u8, str_a.str.len + str_b.str.len);
+            @memcpy(str_c[0..str_a.str.len], str_a.str);
+            @memcpy(str_c[str_a.str.len..], str_b.str);
+            const obj = try Obj.string(str_c, self.allocator);
+            return obj;
+        }
+    }
+
+    return Error.NotAString;
 }

@@ -221,11 +221,13 @@ fn binary(self: *Vm, comptime typ: std.meta.Tag(Value), comptime op: BinOp, comp
 fn concat(self: *Vm, a: *Obj, b: *Obj) !*Obj {
     if (a.asString()) |str_a| {
         if (b.asString()) |str_b| {
-            const str_c = try self.allocator.alloc(u8, str_a.str.len + str_b.str.len);
-            @memcpy(str_c[0..str_a.str.len], str_a.str);
-            @memcpy(str_c[str_a.str.len..], str_b.str);
-            const obj = try Obj.string(str_c, self.allocator);
-            return obj;
+            const slice_a = str_a.getString();
+            const slice_b = str_b.getString();
+            const str_c = try Obj.withSize(slice_a.len + slice_b.len, self.allocator);
+            const slice_c = str_c.getStringMut();
+            @memcpy(slice_c[0..slice_a.len], slice_a);
+            @memcpy(slice_c[slice_a.len..], slice_b);
+            return str_c.getObj();
         }
     }
 

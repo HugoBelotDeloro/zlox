@@ -15,10 +15,33 @@ pub fn ObjTypeOf(comptime typ: ObjType) type {
 
 const ObjString = struct {
     obj: Obj = Obj{ .typ = .String },
-    str: []const u8,
+    len: usize,
+
+    pub fn getObj(self: *ObjString) *Obj {
+        return &self.obj;
+    }
+
+    pub fn getString(self: *const ObjString) []const u8 {
+        return self.getStringPtr()[0..self.len];
+    }
+
+    fn getStringPtr(self: *const ObjString) [*]const u8 {
+        const as_u8: [*]const u8 = @ptrCast(self);
+        return as_u8 + @sizeOf(ObjString);
+    }
+
+    pub fn getStringMut(self: *ObjString) []u8 {
+        return self.getStringPtrMut()[0..self.len];
+    }
+
+    /// Strings should be immutable, only for building
+    fn getStringPtrMut(self: *ObjString) [*]u8 {
+        const as_u8: [*]u8 = @ptrCast(self);
+        return as_u8 + @sizeOf(ObjString);
+    }
 
     pub fn format(
-        str: ObjString,
+        str: *ObjString,
         comptime fmt: []const u8,
         options: std.fmt.FormatOptions,
         writer: anytype,
@@ -26,40 +49,43 @@ const ObjString = struct {
         _ = fmt;
         _ = options;
 
-        try writer.print("\"{s}\"", .{str.str});
+        try writer.print("\"{s}\"", .{str.getString()});
     }
 
     pub fn eql(a: *ObjString, b: *ObjString) bool {
-        return std.mem.eql(u8, a.str, b.str);
+        return std.mem.eql(u8, a.getString(), b.getString());
     }
 };
-
-pub fn asObj(o: anytype) *Obj {
-    return &o.obj;
-}
 
 pub fn asString(self: *Obj) ?*ObjString {
     if (self.typ == .String) return @as(*ObjString, @alignCast(@fieldParentPtr("obj", self)));
     return null;
 }
 
-pub fn copyString(buf: []const u8, alloc: std.mem.Allocator) !*ObjString {
-    const chars = try alloc.alloc(u8, buf.len);
-    @memcpy(chars, buf);
-    return try allocateString(chars, alloc);
+pub fn fromConstant(str: []const u8, alloc: std.mem.Allocator) !*ObjString {
+    const obj_str = try allocateString(str.len, alloc);
+    @memcpy(obj_str.getStringPtrMut(), str);
+    return obj_str;
 }
 
-pub fn string(str: []u8, alloc: std.mem.Allocator) !*Obj {
-    const str_obj = try allocateString(str, alloc);
+pub fn fromCopy(str: []u8, alloc: std.mem.Allocator) !*Obj {
+    const str_obj = try allocateString(str.len, alloc);
 
-    return &str_obj.obj;
+    return str_obj.getObj();
 }
 
-fn allocateString(chars: []const u8, alloc: std.mem.Allocator) !*ObjString {
-    const str = try allocateObject(.String, alloc);
-    str.str = chars;
+pub fn withSize(len: usize, alloc: std.mem.Allocator) !*ObjString {
+    return allocateString(len, alloc);
+}
 
-    return str;
+fn allocateString(buf_size: usize, alloc: std.mem.Allocator) !*ObjString {
+    const bytes = try alloc.alloc(u8, @sizeOf(ObjString) + buf_size);
+    const str_obj: *ObjString = @alignCast(@ptrCast(bytes));
+    str_obj.* = ObjString{ .obj = Obj{
+        .typ = .String,
+    }, .len = buf_size };
+
+    return str_obj;
 }
 
 fn allocateObject(comptime typ: ObjType, alloc: std.mem.Allocator) !*ObjTypeOf(typ) {

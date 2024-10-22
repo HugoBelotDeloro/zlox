@@ -19,6 +19,15 @@ pub const String = struct {
     owned: bool,
     _hash: u32,
 
+    pub fn deinit(self: *String, alloc: std.mem.Allocator) void {
+        if (self.owned) {
+            alloc.free(@as([*]u8, @ptrCast(self))[0..(@sizeOf(String) + self.len)]);
+        } else {
+            alloc.free(@as([*]u8, @ptrCast(self))[0..(@sizeOf(String) + @sizeOf([*]const u8)
+)]);
+        }
+    }
+
     pub fn getObj(self: *String) *Obj {
         return &self.obj;
     }
@@ -137,7 +146,7 @@ fn allocateStringRef(slice: []const u8, alloc: std.mem.Allocator) !*String {
 }
 
 fn allocateObject(comptime typ: ObjType, alloc: std.mem.Allocator) !*ObjTypeOf(typ) {
-    const obj = try alloc.create(ObjTypeOf(typ));
+    const obj: *String = try alloc.create(ObjTypeOf(typ));
     obj.obj = Obj{ .typ = typ };
     return obj;
 }

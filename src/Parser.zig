@@ -177,7 +177,7 @@ fn number(self: *Parser) Error!void {
 
 fn string(self: *Parser) Error!void {
     const str = self.previous.lexeme[1 .. self.previous.lexeme.len - 1];
-    const str_obj = try Obj.fromConstant(str, self.alloc);
+    const str_obj = try Obj.String.fromConstant(str, self.alloc);
     const obj = Value.obj(str_obj.getObj());
     try self.chunk.writeConstant(obj, self.previous.line);
 }

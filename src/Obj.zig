@@ -68,6 +68,61 @@ pub const String = struct {
         return hashed;
     }
 
+    pub fn fromConstant(str: []const u8, alloc: std.mem.Allocator) !*String {
+        const obj_str = try allocateStringRef(str, alloc);
+        const as_u8: [*]u8 = @ptrCast(obj_str);
+        const data = as_u8 + @sizeOf(String);
+        @as(*[*]const u8, @ptrCast(@alignCast(data))).* = str.ptr;
+        return obj_str;
+    }
+
+    pub fn fromCopy(str: []u8, alloc: std.mem.Allocator) !*Obj {
+        const obj_str = try allocateStringOwned(str.len, alloc);
+        @memcpy(obj_str.getStringPtrMut(), str);
+        obj_str._hash = String.hash(obj_str.getString());
+
+        return obj_str.getObj();
+    }
+
+    pub fn withFn(init: fn (buf: []u8, data: *const anyopaque) void, data: *const anyopaque, len: usize, alloc: std.mem.Allocator) !*String {
+        const obj_str = try allocateStringOwned(len, alloc);
+        init(obj_str.getStringMut(), data);
+        obj_str._hash = String.hash(obj_str.getString());
+
+        return obj_str;
+    }
+
+    /// Will not set hash nor init array
+    fn allocateStringOwned(buf_size: usize, alloc: std.mem.Allocator) !*String {
+        const bytes = try alloc.alloc(u8, @sizeOf(String) + buf_size);
+        const obj_str: *String = @alignCast(@ptrCast(bytes));
+        obj_str.* = String{
+            .obj = Obj{
+                .typ = .String,
+            },
+            .len = buf_size,
+            .owned = true,
+            ._hash = undefined,
+        };
+
+        return obj_str;
+    }
+
+    fn allocateStringRef(slice: []const u8, alloc: std.mem.Allocator) !*String {
+        const bytes = try alloc.alloc(u8, @sizeOf(String) + @sizeOf([*]const u8));
+        const obj_str: *String = @alignCast(@ptrCast(bytes));
+        obj_str.* = String{
+            .obj = Obj{
+                .typ = .String,
+            },
+            .len = slice.len,
+            .owned = false,
+            ._hash = String.hash(slice),
+        };
+
+        return obj_str;
+    }
+
     pub fn format(
         str: *String,
         comptime fmt: []const u8,
@@ -88,61 +143,6 @@ pub const String = struct {
 pub fn asString(self: *Obj) ?*String {
     if (self.typ == .String) return @as(*String, @alignCast(@fieldParentPtr("obj", self)));
     return null;
-}
-
-pub fn fromConstant(str: []const u8, alloc: std.mem.Allocator) !*String {
-    const obj_str = try allocateStringRef(str, alloc);
-    const as_u8: [*]u8 = @ptrCast(obj_str);
-    const data = as_u8 + @sizeOf(String);
-    @as(*[*]const u8, @ptrCast(@alignCast(data))).* = str.ptr;
-    return obj_str;
-}
-
-pub fn fromCopy(str: []u8, alloc: std.mem.Allocator) !*Obj {
-    const obj_str = try allocateStringOwned(str.len, alloc);
-    @memcpy(obj_str.getStringPtrMut(), str);
-    obj_str._hash = String.hash(obj_str.getString());
-
-    return obj_str.getObj();
-}
-
-pub fn withFn(init: fn (buf: []u8, data: *const anyopaque) void, data: *const anyopaque, len: usize, alloc: std.mem.Allocator) !*String {
-    const obj_str = try allocateStringOwned(len, alloc);
-    init(obj_str.getStringMut(), data);
-    obj_str._hash = String.hash(obj_str.getString());
-
-    return obj_str;
-}
-
-/// Will not set hash nor init array
-fn allocateStringOwned(buf_size: usize, alloc: std.mem.Allocator) !*String {
-    const bytes = try alloc.alloc(u8, @sizeOf(String) + buf_size);
-    const obj_str: *String = @alignCast(@ptrCast(bytes));
-    obj_str.* = String{
-        .obj = Obj{
-            .typ = .String,
-        },
-        .len = buf_size,
-        .owned = true,
-        ._hash = undefined,
-    };
-
-    return obj_str;
-}
-
-fn allocateStringRef(slice: []const u8, alloc: std.mem.Allocator) !*String {
-    const bytes = try alloc.alloc(u8, @sizeOf(String) + @sizeOf([*]const u8));
-    const obj_str: *String = @alignCast(@ptrCast(bytes));
-    obj_str.* = String{
-        .obj = Obj{
-            .typ = .String,
-        },
-        .len = slice.len,
-        .owned = false,
-        ._hash = String.hash(slice),
-    };
-
-    return obj_str;
 }
 
 fn allocateObject(comptime typ: ObjType, alloc: std.mem.Allocator) !*ObjTypeOf(typ) {

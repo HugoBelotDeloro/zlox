@@ -244,7 +244,7 @@ fn concat(self: *Vm, a: *Obj, b: *Obj) !*Obj {
 
             const len = slice_a.len + slice_b.len;
 
-            const str_c = try Obj.withFn(Args.copySlices, @ptrCast(&args), len, self.allocator);
+            const str_c = try Obj.String.withFn(Args.copySlices, @ptrCast(&args), len, self.allocator);
             return str_c.getObj();
         }
     }

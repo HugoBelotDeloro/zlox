@@ -39,11 +39,11 @@
         "systems": "systems_2"
       },
       "locked": {
-        "lastModified": 1710146030,
-        "narHash": "sha256-SZ5L6eA7HJ/nmkzGG7/ISclqe6oZdOZTNoesiInkXPQ=",
+        "lastModified": 1726560853,
+        "narHash": "sha256-X6rJYSESBVr3hBoH0WbKE5KvhPU5bloyZ2L4K60/fPQ=",
         "owner": "numtide",
         "repo": "flake-utils",
-        "rev": "b1d9ab70662946ef0850d488da1c9019f3a9752a",
+        "rev": "c1dfcf08411b08f6b8615f7d8971a2bfa81d5e8a",
         "type": "github"
       },
       "original": {
@@ -75,10 +75,10 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1726320982,
-        "narHash": "sha256-RuVXUwcYwaUeks6h3OLrEmg14z9aFXdWppTWPMTwdQw=",
-        "path": "/nix/store/s8pb2vy9zdjxlc5gr2iwkkm9y5gqr4ph-source",
-        "rev": "8f7492cce28977fbf8bd12c72af08b1f6c7c3e49",
+        "lastModified": 1728500571,
+        "narHash": "sha256-dOymOQ3AfNI4Z337yEwHGohrVQb4yPODCW9MDUyAc4w=",
+        "path": "/nix/store/m1szqwijms610n6325mwjswslha4nd92-source",
+        "rev": "d51c28603def282a24fa034bcb007e2bcb5b5dd0",
         "type": "path"
       },
       "original": {
@@ -88,10 +88,10 @@
     },
     "nixpkgs-unstable": {
       "locked": {
-        "lastModified": 1726243404,
-        "narHash": "sha256-sjiGsMh+1cWXb53Tecsm4skyFNag33GPbVgCdfj3n9I=",
-        "path": "/nix/store/l3amk5lsakpc93him5kry24kax23sn4h-source",
-        "rev": "345c263f2f53a3710abe117f28a5cb86d0ba4059",
+        "lastModified": 1728492678,
+        "narHash": "sha256-9UTxR8eukdg+XZeHgxW5hQA9fIKHsKCdOIUycTryeVw=",
+        "path": "/nix/store/60sn02zhawl3kwn0r515zff3h6hg6ydz-source",
+        "rev": "5633bcff0c6162b9e4b5f1264264611e950c8ec7",
         "type": "path"
       },
       "original": {
@@ -146,11 +146,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1727266273,
-        "narHash": "sha256-3pnLjcRd415LiSrzhg4lEkF9sp4rS9bKqLl8zoaXzlQ=",
+        "lastModified": 1729599122,
+        "narHash": "sha256-SmlUIzDp+ZNBjZViXIyNyjFOhbBSrPnIchQvq9NV+2Q=",
         "owner": "mitchellh",
         "repo": "zig-overlay",
-        "rev": "91e1ab9e3b20318c37a0b73f42c770cbd6c31e2b",
+        "rev": "c463bd580cda64316100a109b69527440ccf740c",
         "type": "github"
       },
       "original": {
@@ -171,11 +171,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1727202282,
-        "narHash": "sha256-c6fMn99XWXymIaQoMwQfJpZgvE5dU4OzIf+qdHkEFmY=",
+        "lastModified": 1729353227,
+        "narHash": "sha256-0WkHLHLxgFVgNJi32zcrrx3O+n83dupdleIVJlnHL/k=",
         "owner": "zigtools",
         "repo": "zls",
-        "rev": "59d18631e4277dd403ca21cde3a4af419933359a",
+        "rev": "a6bdd0bb5653ca316d96aa8f94395c98a9ffb4e1",
         "type": "github"
       },
       "original": {

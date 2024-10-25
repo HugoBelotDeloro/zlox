@@ -23,8 +23,7 @@ pub const String = struct {
         if (self.owned) {
             alloc.free(@as([*]u8, @ptrCast(self))[0..(@sizeOf(String) + self.len)]);
         } else {
-            alloc.free(@as([*]u8, @ptrCast(self))[0..(@sizeOf(String) + @sizeOf([*]const u8)
-)]);
+            alloc.free(@as([*]u8, @ptrCast(self))[0..(@sizeOf(String) + @sizeOf([*]const u8))]);
         }
     }
 
@@ -136,7 +135,7 @@ pub const String = struct {
     }
 
     pub fn eql(a: *String, b: *String) bool {
-        return std.mem.eql(u8, a.getString(), b.getString());
+        return a == b; // Thanks to interning
     }
 };
 

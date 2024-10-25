@@ -21,7 +21,7 @@ pub fn Table(V: type) type {
         alloc: std.mem.Allocator,
 
         pub fn init(alloc: std.mem.Allocator) Self {
-            return Self {
+            return Self{
                 .count = 0,
                 .entries = &.{},
                 .alloc = alloc,
@@ -61,7 +61,7 @@ pub fn Table(V: type) type {
         /// Assumes the entries slice is non-empty
         fn findEntry(self: *const Self, key: *Obj.String) *Entry {
             var index = key._hash % self.entries.len;
-            var tombstone: ?*Entry= null;
+            var tombstone: ?*Entry = null;
 
             while (true) : (index = (index + 1) % self.entries.len) {
                 const entry = &self.entries[index];
@@ -106,6 +106,24 @@ pub fn Table(V: type) type {
         fn maxLoad(size: usize) usize {
             return @as(usize, @intFromFloat(@as(f32, @floatFromInt(size)) * MaxLoad));
         }
+
+        pub fn findString(self: *Self, chars: []const u8, hash: u32) ?*Obj.String {
+            if (self.count == 0) return null;
+
+            var index = hash % self.entries.len;
+            while (true) {
+                const entry = &self.entries[index];
+                if (entry.key) |key| {
+                    if (key._hash == hash and std.mem.eql(u8, chars, key.getString())) {
+                        return key;
+                    }
+                } else {
+                    if (entry.value == Empty) return null;
+                }
+
+                index = (index + 1) % self.entries.len;
+            }
+        }
     };
 }
 
@@ -140,7 +158,7 @@ test "many" {
     var objs: [s.len]*Obj.String = undefined;
     var i: usize = 0;
     while (i < s.len) : (i += 1) {
-        objs[i] = try Obj.fromConstant(s[i..i+1], alloc);
+        objs[i] = try Obj.fromConstant(s[i .. i + 1], alloc);
     }
 
     i = 0;

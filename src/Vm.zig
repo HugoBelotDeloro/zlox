@@ -3,6 +3,7 @@ const Chunk = @import("Chunk.zig");
 const OpCode = Chunk.OpCode;
 const Value = @import("value.zig").Value;
 const Obj = @import("Obj.zig");
+const Table = @import("table.zig").Table;
 
 const Vm = @This();
 
@@ -27,6 +28,8 @@ chunk: *const Chunk,
 ip: [*]u8,
 stack: []Value,
 stack_top: [*]Value,
+/// Value is not used but must be non-zero to distinguish tombstones from empty cells.
+strings: Table(u8),
 
 allocator: std.mem.Allocator,
 
@@ -58,11 +61,11 @@ fn run(self: *Vm, writer: std.io.AnyWriter) !InterpretResult {
             },
             .Constant => {
                 const constant = self.readConstant();
-                try self.push(constant);
+                try self.pushConstant(constant);
             },
             .ConstantLong => {
                 const constant = self.readConstantLong();
-                try self.push(constant);
+                try self.pushConstant(constant);
             },
             .Nil => self.push(Value.nil()),
             .True => self.push(Value.boolean(true)),
@@ -106,11 +109,13 @@ fn init(allocator: std.mem.Allocator, chunk: *const Chunk) !Vm {
         .stack = stack,
         .stack_top = stack.ptr,
         .allocator = allocator,
+        .strings = Table(u8).init(allocator),
     };
 }
 
 fn deinit(self: *Vm) void {
     self.allocator.free(self.stack);
+    self.strings.deinit();
 }
 
 pub const InterpretResult = enum {
@@ -148,9 +153,9 @@ fn readConstant(self: *Vm) Value {
 }
 
 fn readConstantLong(self: *Vm) Value {
-    const constant_id = std.mem.bytesAsValue(u24, self.ip).*;
+    const id = std.mem.bytesAsValue(u24, self.ip).*;
     self.ip += 3;
-    return self.chunk.constants.items[constant_id];
+    return self.chunk.constants.items[id];
 }
 
 fn peek(self: *Vm, n: usize) Value {
@@ -245,9 +250,30 @@ fn concat(self: *Vm, a: *Obj, b: *Obj) !*Obj {
             const len = slice_a.len + slice_b.len;
 
             const str_c = try Obj.String.withFn(Args.copySlices, @ptrCast(&args), len, self.allocator);
+            if (self.strings.findString(str_c.getString(), str_c._hash)) |interned| {
+                return interned.getObj();
+            }
+            _ = try self.strings.set(str_c, 0);
             return str_c.getObj();
         }
     }
 
     return Error.NotAString;
+}
+
+fn pushConstant(self: *Vm, constant: Value) !void {
+    if (constant.asObj()) |obj| {
+        if (obj.asString()) |str| {
+            if (self.strings.findString(str.getString(), str._hash)) |interned| {
+                try self.push(Value.any(interned));
+            } else {
+                _ = try self.strings.set(str, 0);
+                try self.push(Value.any(str));
+            }
+        } else {
+            try self.push(constant);
+        }
+    } else {
+        try self.push(constant);
+    }
 }

@@ -260,8 +260,27 @@ fn printStatement(self: *Parser) !void {
     try self.emitInstruction(.Print);
 }
 
+fn synchronize(self: *Parser) !void {
+    if (try self.discardTokens()) {
+        self.panic_mode = false;
+    }
+}
+
+fn discardTokens(self: *Parser) !bool {
+    while (!self.check(.Eof)) {
+        if (self.previous.typ == .Semicolon) return true;
+        switch (self.current.typ) {
+            .Class, .Fun, .Var, .For, .If, .While, .Print, .Return => return true,
+            else => try self.advance(),
+        }
+    }
+    return false;
+}
+
 fn declaration(self: *Parser) !void {
-    return self.statement();
+    try self.statement();
+
+    if (self.panic_mode) try self.synchronize();
 }
 
 fn statement(self: *Parser) !void {

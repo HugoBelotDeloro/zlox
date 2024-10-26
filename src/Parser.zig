@@ -248,6 +248,12 @@ fn expression(self: *Parser) !void {
     try self.parsePrecedence(.Assignment);
 }
 
+fn expressionStatement(self: *Parser) !void {
+    try self.expression();
+    try self.consume(.Semicolon, Error.MissingSemicolon);
+    try self.emitInstruction(.Pop);
+}
+
 fn printStatement(self: *Parser) !void {
     try self.expression();
     try self.consume(.Semicolon, Error.MissingSemicolon);
@@ -261,6 +267,8 @@ fn declaration(self: *Parser) !void {
 fn statement(self: *Parser) !void {
     if (try self.match(.Print)) {
         return self.printStatement();
+    } else {
+        return self.expressionStatement();
     }
 }
 

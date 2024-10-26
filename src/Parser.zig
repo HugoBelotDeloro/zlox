@@ -15,6 +15,7 @@ const Error = error{
     ExpectEndOfExpression,
     ExpectExpression,
     UnclosedParenthese,
+    MissingSemicolon,
 } || std.mem.Allocator.Error || std.fmt.ParseFloatError;
 
 var error_token: ?Token = null;
@@ -105,8 +106,10 @@ pub fn compile(source: []const u8, chunk: *Chunk, alloc: std.mem.Allocator) !voi
     var self = Parser.init(source, chunk, alloc);
 
     try self.advance();
-    self.expression() catch |err| try reportError(error_token.?, @errorName(err), std.io.getStdErr().writer().any());
 
+    while (self.current.typ != .Eof) {
+        self.declaration() catch |err| try reportError(error_token.?, @errorName(err), std.io.getStdErr().writer().any());
+    }
     try self.consume(.Eof, Error.ExpectEndOfExpression);
     try self.endCompiler();
 
@@ -135,6 +138,16 @@ fn consume(self: *Parser, typ: TokenType, err: Error) Error!void {
         return;
     }
     try self.errorAtCurrent(err);
+}
+
+fn check(self: *Parser, typ: TokenType) bool {
+    return self.current.typ == typ;
+}
+
+fn match(self: *Parser, typ: TokenType) !bool {
+    if (!self.check(typ)) return false;
+    try self.advance();
+    return true;
 }
 
 fn emitInstruction(self: *Parser, instr: OpCode) !void {
@@ -233,6 +246,22 @@ fn @"false"(self: *Parser) !void {
 
 fn expression(self: *Parser) !void {
     try self.parsePrecedence(.Assignment);
+}
+
+fn printStatement(self: *Parser) !void {
+    try self.expression();
+    try self.consume(.Semicolon, Error.MissingSemicolon);
+    try self.emitInstruction(.Print);
+}
+
+fn declaration(self: *Parser) !void {
+    return self.statement();
+}
+
+fn statement(self: *Parser) !void {
+    if (try self.match(.Print)) {
+        return self.printStatement();
+    }
 }
 
 fn parsePrecedence(self: *Parser, precedence: Precedence) Error!void {

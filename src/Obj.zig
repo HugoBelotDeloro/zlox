@@ -96,9 +96,6 @@ pub const String = struct {
         const bytes = try alloc.alloc(u8, @sizeOf(String) + buf_size);
         const obj_str: *String = @alignCast(@ptrCast(bytes));
         obj_str.* = String{
-            .obj = Obj{
-                .typ = .String,
-            },
             .len = buf_size,
             .owned = true,
             ._hash = undefined,
@@ -111,9 +108,6 @@ pub const String = struct {
         const bytes = try alloc.alloc(u8, @sizeOf(String) + @sizeOf([*]const u8));
         const obj_str: *String = @alignCast(@ptrCast(bytes));
         obj_str.* = String{
-            .obj = Obj{
-                .typ = .String,
-            },
             .len = slice.len,
             .owned = false,
             ._hash = String.hash(slice),

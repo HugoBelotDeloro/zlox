@@ -22,6 +22,7 @@ pub const OpCode = enum(u8) {
     Divide,
     Not,
     Negate,
+    Print,
     Return,
     _,
 };

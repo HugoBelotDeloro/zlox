@@ -55,6 +55,7 @@ fn run(self: *Vm, writer: std.io.AnyWriter) !InterpretResult {
         }
 
         try switch (self.readInstruction()) {
+            .Print => try writer.print("{}\n", .{self.pop()}),
             .Return => {
                 try writer.print("{d}\n", .{self.pop()});
                 return .Ok;

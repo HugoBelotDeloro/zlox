@@ -75,7 +75,7 @@ pub const String = struct {
         return obj_str;
     }
 
-    pub fn fromCopy(str: []u8, alloc: std.mem.Allocator) !*Obj {
+    pub fn fromCopy(str: []const u8, alloc: std.mem.Allocator) !*Obj {
         const obj_str = try allocateStringOwned(str.len, alloc);
         @memcpy(obj_str.getStringPtrMut(), str);
         obj_str._hash = String.hash(obj_str.getString());

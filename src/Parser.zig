@@ -14,6 +14,7 @@ const DebugPrintChunk = true and !@import("builtin").is_test;
 const Error = error{
     ExpectEndOfExpression,
     ExpectExpression,
+    ExpectIdentifier,
     UnclosedParenthese,
     MissingSemicolon,
 } || std.mem.Allocator.Error || std.fmt.ParseFloatError;
@@ -248,6 +249,19 @@ fn expression(self: *Parser) !void {
     try self.parsePrecedence(.Assignment);
 }
 
+fn varDeclaration(self: *Parser) !void {
+    const global_id = try self.parseVariable(Error.ExpectIdentifier);
+
+    if (try self.match(.Equal)) {
+        try self.expression();
+    } else {
+        try self.emitInstruction(.Nil);
+    }
+    try self.consume(.Semicolon, Error.MissingSemicolon);
+
+    try self.defineVariable(global_id);
+}
+
 fn expressionStatement(self: *Parser) !void {
     try self.expression();
     try self.consume(.Semicolon, Error.MissingSemicolon);
@@ -278,7 +292,11 @@ fn discardTokens(self: *Parser) !bool {
 }
 
 fn declaration(self: *Parser) !void {
-    try self.statement();
+    if (try self.match(.Var)) {
+        try self.varDeclaration();
+    } else {
+        try self.statement();
+    }
 
     if (self.panic_mode) try self.synchronize();
 }
@@ -306,6 +324,21 @@ fn parsePrecedence(self: *Parser, precedence: Precedence) Error!void {
             try infixFn(self);
         } else unreachable;
     }
+}
+
+fn identifierConstant(self: *Parser, token: *Token) !usize {
+    const obj = try Obj.String.fromCopy(token.lexeme, self.alloc);
+    const val = Value.any(obj);
+    return self.chunk.addConstant(val);
+}
+
+fn parseVariable(self: *Parser, err: Error) !usize {
+    try self.consume(.Identifier, err);
+    return self.identifierConstant(&self.previous);
+}
+
+fn defineVariable(self: *Parser, global_id: usize) !void {
+    return self.chunk.writeGlobal(global_id, self.previous.line);
 }
 
 fn getRule(typ: TokenType) ParseRule {

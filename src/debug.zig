@@ -23,8 +23,8 @@ pub fn disassembleInstruction(chunk: *const Chunk, offset: usize, writer: std.io
     const instruction: OpCode = @enumFromInt(chunk.code.items[offset]);
     return switch (instruction) {
         .Print, .Return, .Equal, .Greater, .Less, .Add, .Subtract, .Multiply, .Divide, .Not, .Negate, .True, .False, .Pop, .Nil => simpleInstruction(instruction, offset, writer),
-        .Constant => constantInstruction(instruction, offset, writer, chunk),
-        .ConstantLong => constantLongInstruction(offset, writer, chunk),
+        .Constant, .DefineGlobal => constantInstruction(instruction, offset, writer, chunk),
+        .ConstantLong, .DefineGlobalLong => constantLongInstruction(instruction, offset, writer, chunk),
         _ => unknownOpcode(instruction, offset, writer),
     };
 }
@@ -37,10 +37,10 @@ fn constantInstruction(instruction: OpCode, offset: usize, writer: std.io.AnyWri
     return offset + 2;
 }
 
-fn constantLongInstruction(offset: usize, writer: std.io.AnyWriter, chunk: *const Chunk) !usize {
+fn constantLongInstruction(instruction: OpCode, offset: usize, writer: std.io.AnyWriter, chunk: *const Chunk) !usize {
     const constant_id: u24 = std.mem.bytesAsValue(u24, &chunk.code.items[offset + 1]).*;
     const constant = chunk.constants.items[constant_id];
-    try writer.print("{s: <16} {d: >4} '{d}'\n", .{ @tagName(OpCode.ConstantLong), constant_id, constant });
+    try writer.print("{s: <16} {d: >4} '{d}'\n", .{ @tagName(instruction), constant_id, constant });
 
     return offset + 4;
 }

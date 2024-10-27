@@ -14,6 +14,7 @@ const Error = error{
     NotANumber,
     NotAString,
     NotANumberOrString,
+    UnknownOpCode,
 };
 
 fn errorString(err: anyerror) ?[]const u8 {
@@ -99,7 +100,7 @@ fn run(self: *Vm, writer: std.io.AnyWriter) !InterpretResult {
                 },
                 else => Error.NotANumber,
             },
-            else => {},
+            else => return Error.UnknownOpCode,
         };
     }
     unreachable;

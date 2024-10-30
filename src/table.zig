@@ -10,11 +10,25 @@ pub fn Table(V: type) type {
         const Entry = struct {
             key: ?*Obj.String,
             value: V,
+
+            fn isTombstone(self: *Entry) bool {
+                const bytes = std.mem.asBytes(&self.value);
+                return std.mem.eql(u8, bytes, &Tombstone());
+            }
+
+            fn Tombstone() align(@alignOf(V)) [@sizeOf(V)]u8 {
+                return [_]u8{42} ** @sizeOf(V);
+            }
+
+            fn isEmpty(self: *Entry) bool {
+                const bytes = std.mem.asBytes(&self.value);
+                return std.mem.eql(u8, bytes, &Empty());
+            }
+
+            fn Empty() align(@alignOf(V)) [@sizeOf(V)]u8 {
+                return @bitCast([_]u8{13} ** @sizeOf(V));
+            }
         };
-
-        const Tombstone: V = @bitCast([_]u8{42} ** @sizeOf(V));
-
-        const Empty: V = @bitCast([_]u8{13} ** @sizeOf(V));
 
         count: usize,
         entries: []Entry,
@@ -39,7 +53,7 @@ pub fn Table(V: type) type {
             }
             const entry = self.findEntry(key);
             const isNewKey = entry.key == null;
-            if (isNewKey and entry.value != Tombstone) self.count += 1;
+            if (isNewKey and !entry.isTombstone()) self.count += 1;
 
             entry.key = key;
             entry.value = value;
@@ -49,12 +63,12 @@ pub fn Table(V: type) type {
         pub fn delete(self: *Self, key: *Obj.String) bool {
             if (self.count == 0) return false;
 
-            const entry = self.findEntry(key);
+            var entry = self.findEntry(key);
             if (entry.key == null) return false;
 
             entry.key = null;
-            const was_alive = entry.value != Tombstone;
-            entry.value = Tombstone;
+            const was_alive = !entry.isTombstone();
+            std.mem.asBytes(&entry.value).* = Entry.Tombstone();
             return was_alive;
         }
 
@@ -66,7 +80,7 @@ pub fn Table(V: type) type {
             while (true) : (index = (index + 1) % self.entries.len) {
                 const entry = &self.entries[index];
                 if (entry.key == null) {
-                    if (entry.value == Tombstone) {
+                    if (entry.isTombstone()) {
                         if (tombstone == null) tombstone = entry;
                     } else {
                         return if (tombstone) |t| t else entry;
@@ -86,7 +100,9 @@ pub fn Table(V: type) type {
 
         fn adjustCapacity(self: *Self, capacity: usize) !void {
             const new_buf = try self.alloc.alloc(Entry, capacity);
-            @memset(new_buf, Entry{ .key = null, .value = Empty });
+            var empty = Entry{ .key = null, .value = undefined };
+            std.mem.asBytes(&empty.value).* = Entry.Empty();
+            @memset(new_buf, empty);
 
             const old_entries = self.entries;
             self.entries = new_buf;
@@ -118,7 +134,7 @@ pub fn Table(V: type) type {
                         return key;
                     }
                 } else {
-                    if (entry.value == Empty) return null;
+                    if (entry.isEmpty()) return null;
                 }
 
                 index = (index + 1) % self.entries.len;

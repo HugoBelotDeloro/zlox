@@ -31,6 +31,7 @@ stack: []Value,
 stack_top: [*]Value,
 /// Value is not used but must be non-zero to distinguish tombstones from empty cells.
 strings: Table(u8),
+globals: Table(Value),
 
 allocator: std.mem.Allocator,
 
@@ -75,6 +76,16 @@ fn run(self: *Vm, writer: std.io.AnyWriter) !InterpretResult {
             .Pop => {
                 _ = self.pop();
             },
+            .DefineGlobal => {
+                const name = try self.readString();
+                _ = try self.globals.set(name, self.peek(0));
+                _ = self.pop();
+            },
+            .DefineGlobalLong => {
+                const name = try self.readStringLong();
+                _ = try self.globals.set(name, self.peek(0));
+                _ = self.pop();
+            },
             .Equal => {
                 const b = self.pop();
                 const a = self.pop();
@@ -115,12 +126,14 @@ fn init(allocator: std.mem.Allocator, chunk: *const Chunk) !Vm {
         .stack_top = stack.ptr,
         .allocator = allocator,
         .strings = Table(u8).init(allocator),
+        .globals = Table(Value).init(allocator),
     };
 }
 
 fn deinit(self: *Vm) void {
     self.allocator.free(self.stack);
     self.strings.deinit();
+    self.globals.deinit();
 }
 
 pub const InterpretResult = enum {
@@ -157,10 +170,20 @@ fn readConstant(self: *Vm) Value {
     return self.chunk.constants.items[id];
 }
 
+fn readString(self: *Vm) !*Obj.String {
+    const obj = self.readConstant().asObj() orelse return Error.NotAString;
+    return obj.asString() orelse return Error.NotAString;
+}
+
 fn readConstantLong(self: *Vm) Value {
     const id = std.mem.bytesAsValue(u24, self.ip).*;
     self.ip += 3;
     return self.chunk.constants.items[id];
+}
+
+fn readStringLong(self: *Vm) !*Obj.String {
+    const obj = self.readConstantLong().asObj() orelse return Error.NotAString;
+    return obj.asString() orelse return Error.NotAString;
 }
 
 fn peek(self: *Vm, n: usize) Value {

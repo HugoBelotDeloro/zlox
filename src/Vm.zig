@@ -15,11 +15,16 @@ const Error = error{
     NotAString,
     NotANumberOrString,
     UnknownOpCode,
+    UndefinedSymbol,
 };
 
 fn errorString(err: anyerror) ?[]const u8 {
     return switch (err) {
         Error.NotANumber => "Operand must be a number.",
+        Error.NotAString => "Not a string",
+        Error.NotANumberOrString => "Not a number or a string",
+        Error.UnknownOpCode => "Unknown OpCode",
+        Error.UndefinedSymbol => "Undefined Symbol",
         else => null,
     };
 }
@@ -30,18 +35,18 @@ ip: [*]u8,
 stack: []Value,
 stack_top: [*]Value,
 /// Value is not used but must be non-zero to distinguish tombstones from empty cells.
-strings: Table(u8),
+strings: *Table(u8),
 globals: Table(Value),
 
 allocator: std.mem.Allocator,
 
-pub fn interpret(chunk: *const Chunk, allocator: std.mem.Allocator, writer: std.io.AnyWriter) !InterpretResult {
-    var vm = try Vm.init(allocator, chunk);
+pub fn interpret(chunk: *const Chunk, strings: *Table(u8), allocator: std.mem.Allocator, writer: std.io.AnyWriter) !InterpretResult {
+    var vm = try Vm.init(allocator, chunk, strings);
     defer vm.deinit();
 
     return vm.run(writer) catch |err| {
         if (errorString(err)) |msg| {
-            _ = try writer.print("{s}\n[line {d} in script]\n", .{ msg, vm.chunk.getLine(vm.instructionIndex()) });
+            _ = try writer.print("[line {d} in script] {s}\n", .{ vm.chunk.getLine(vm.instructionIndex()), msg });
         }
         vm.resetStack();
         return error.RuntimeError;
@@ -75,6 +80,22 @@ fn run(self: *Vm, writer: std.io.AnyWriter) !InterpretResult {
             .False => self.push(Value.boolean(false)),
             .Pop => {
                 _ = self.pop();
+            },
+            .GetGlobal => {
+                const name = try self.readString();
+                if (self.globals.get(name)) |global| {
+                    try self.push(global);
+                } else {
+                    return Error.UndefinedSymbol;
+                }
+            },
+            .GetGlobalLong => {
+                const name = try self.readStringLong();
+                if (self.globals.get(name)) |global| {
+                    try self.push(global);
+                } else {
+                    return Error.UndefinedSymbol;
+                }
             },
             .DefineGlobal => {
                 const name = try self.readString();
@@ -117,7 +138,7 @@ fn run(self: *Vm, writer: std.io.AnyWriter) !InterpretResult {
     unreachable;
 }
 
-fn init(allocator: std.mem.Allocator, chunk: *const Chunk) !Vm {
+fn init(allocator: std.mem.Allocator, chunk: *const Chunk, strings: *Table(u8)) !Vm {
     const stack = try allocator.alloc(Value, StackBaseSize);
     return Vm{
         .chunk = chunk,
@@ -125,14 +146,13 @@ fn init(allocator: std.mem.Allocator, chunk: *const Chunk) !Vm {
         .stack = stack,
         .stack_top = stack.ptr,
         .allocator = allocator,
-        .strings = Table(u8).init(allocator),
+        .strings = strings,
         .globals = Table(Value).init(allocator),
     };
 }
 
 fn deinit(self: *Vm) void {
     self.allocator.free(self.stack);
-    self.strings.deinit();
     self.globals.deinit();
 }
 
@@ -292,16 +312,16 @@ fn concat(self: *Vm, a: *Obj, b: *Obj) !*Obj {
 fn pushConstant(self: *Vm, constant: Value) !void {
     if (constant.asObj()) |obj| {
         if (obj.asString()) |str| {
-            if (self.strings.findString(str.getString(), str._hash)) |interned| {
-                try self.push(Value.any(interned));
-            } else {
-                _ = try self.strings.set(str, 0);
-                try self.push(Value.any(str));
-            }
-        } else {
-            try self.push(constant);
+            return self.pushString(str);
         }
-    } else {
-        try self.push(constant);
     }
+    try self.push(constant);
+}
+
+fn pushString(self: *Vm, str: *Obj.String) !void {
+    if (self.strings.findString(str.getString(), str._hash)) |interned| {
+        return self.push(Value.any(interned));
+    }
+    _ = try self.strings.set(str, 0);
+    try self.push(Value.any(str));
 }

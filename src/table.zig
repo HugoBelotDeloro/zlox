@@ -140,6 +140,21 @@ pub fn Table(V: type) type {
                 index = (index + 1) % self.entries.len;
             }
         }
+
+        pub fn format(
+            self: Self,
+            comptime fmt: []const u8,
+            options: std.fmt.FormatOptions,
+            writer: anytype,
+        ) !void {
+            _ = fmt;
+            _ = options;
+            _ = try writer.print("Table(count: {d}, size: {d}){{", .{ self.count, self.entries.len });
+            for (self.entries) |entry| if (entry.key) |key| {
+                _ = try writer.print("<{}: {}>,", .{ key, entry.value });
+            };
+            _ = try writer.write("}");
+        }
     };
 }
 
@@ -157,10 +172,12 @@ test "basic" {
 
     try t.expect(try table.set(str_1, 1));
     try t.expect(!try table.set(str_1, 2));
+    try t.expectEqual(2, table.count);
     try t.expectEqual(2, table.get(str_1));
     try t.expectEqual(null, table.get(str_2));
     try t.expect(table.delete(str_1));
     try t.expect(!table.delete(str_1));
+    try t.expectEqual(2, table.count);
 }
 
 test "many" {

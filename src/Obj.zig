@@ -57,7 +57,7 @@ pub const String = struct {
         return as_u8 + @sizeOf(String);
     }
 
-    fn hash(str: []const u8) u32 {
+    pub fn hash(str: []const u8) u32 {
         var hashed: u32 = 2166136261;
         for (str) |c| {
             hashed ^= c;

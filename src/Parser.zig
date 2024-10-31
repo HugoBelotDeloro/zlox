@@ -6,6 +6,7 @@ const Chunk = @import("Chunk.zig");
 const OpCode = Chunk.OpCode;
 const Value = @import("value.zig").Value;
 const Obj = @import("Obj.zig");
+const Table = @import("table.zig").Table;
 
 const Parser = @This();
 
@@ -25,6 +26,7 @@ current: Token,
 previous: Token,
 scanner: Scanner,
 chunk: *Chunk,
+strings: *Table(u8),
 had_error: bool = false,
 panic_mode: bool = false,
 
@@ -69,7 +71,7 @@ const ParseRule = struct {
         .GreaterEqual = .{ .prefix = null, .infix = binary, .precedence = .Comparison },
         .Less = .{ .prefix = null, .infix = binary, .precedence = .Comparison },
         .LessEqual = .{ .prefix = null, .infix = binary, .precedence = .Comparison },
-        .Identifier = .{ .prefix = null, .infix = null, .precedence = .None },
+        .Identifier = .{ .prefix = variable, .infix = null, .precedence = .None },
         .String = .{ .prefix = string, .infix = null, .precedence = .None },
         .Number = .{ .prefix = number, .infix = null, .precedence = .None },
         .And = .{ .prefix = null, .infix = null, .precedence = .None },
@@ -93,18 +95,19 @@ const ParseRule = struct {
     });
 };
 
-fn init(source: []const u8, chunk: *Chunk, alloc: std.mem.Allocator) Parser {
+fn init(source: []const u8, chunk: *Chunk, strings: *Table(u8), alloc: std.mem.Allocator) Parser {
     return Parser{
         .scanner = Scanner.init(source),
         .chunk = chunk,
+        .strings = strings,
         .previous = undefined,
         .current = undefined,
         .alloc = alloc,
     };
 }
 
-pub fn compile(source: []const u8, chunk: *Chunk, alloc: std.mem.Allocator) !void {
-    var self = Parser.init(source, chunk, alloc);
+pub fn compile(source: []const u8, chunk: *Chunk, strings: *Table(u8), alloc: std.mem.Allocator) !void {
+    var self = Parser.init(source, chunk, strings, alloc);
 
     try self.advance();
 
@@ -155,9 +158,13 @@ fn emitInstruction(self: *Parser, instr: OpCode) !void {
     return self.chunk.writeInstruction(instr, self.previous.line);
 }
 
-fn emitInstructions(self: *Parser, comptime instructions: anytype) !void {
+fn emitInstructions(self: *Parser, instructions: anytype) !void {
     inline for (instructions) |instruction| {
-        try self.emitInstruction(instruction);
+        if (@TypeOf(instruction) == u8) {
+            try self.emitInstruction(@enumFromInt(instruction));
+        } else {
+            try self.emitInstruction(instruction);
+        }
     }
 }
 
@@ -191,9 +198,19 @@ fn number(self: *Parser) Error!void {
 
 fn string(self: *Parser) Error!void {
     const str = self.previous.lexeme[1 .. self.previous.lexeme.len - 1];
-    const str_obj = try Obj.String.fromConstant(str, self.alloc);
+    const str_obj = try self.tryIntern(str);
     const obj = Value.obj(str_obj.getObj());
     try self.chunk.writeConstant(obj, self.previous.line);
+}
+
+fn variable(self: *Parser) Error!void {
+    try self.namedVariable();
+}
+
+fn namedVariable(self: *Parser) Error!void {
+    const arg = try self.identifierConstant(&self.previous);
+    try self.emitInstruction(if (arg > 255) .GetGlobalLong else .GetGlobal);
+    try self.chunk.writeConstantId(arg, self.previous.line);
 }
 
 fn grouping(self: *Parser) Error!void {
@@ -327,9 +344,19 @@ fn parsePrecedence(self: *Parser, precedence: Precedence) Error!void {
 }
 
 fn identifierConstant(self: *Parser, token: *Token) !usize {
-    const obj = try Obj.String.fromCopy(token.lexeme, self.alloc);
+    const obj = try self.tryIntern(token.lexeme);
     const val = Value.any(obj);
     return self.chunk.addConstant(val);
+}
+
+fn tryIntern(self: *Parser, str: []const u8) !*Obj.String {
+    const hash = Obj.String.hash(str);
+    if (self.strings.findString(str, hash)) |obj| {
+        return obj;
+    }
+    const obj = try Obj.String.fromConstant(str, self.alloc);
+    _ = try self.strings.set(obj, 0);
+    return obj;
 }
 
 fn parseVariable(self: *Parser, err: Error) !usize {

@@ -14,6 +14,8 @@ pub const OpCode = enum(u8) {
     True,
     False,
     Pop,
+    GetGlobal,
+    GetGlobalLong,
     DefineGlobal,
     DefineGlobalLong,
     Equal,
@@ -105,6 +107,18 @@ pub fn writeGlobal(self: *Chunk, global_id: usize, line: u32) !void {
     } else {
         try self.writeInstruction(OpCode.DefineGlobal, line);
 
+        const byte: u8 = @intCast(global_id);
+        try self.writeChunk(byte, line);
+    }
+}
+
+pub fn writeConstantId(self: *Chunk, global_id: usize, line: u32) !void {
+    if (global_id > 255) {
+        const bytes = try self.code.addManyAt(self.code.items.len, 3);
+        const constant_id_ptr = std.mem.bytesAsValue(u24, bytes);
+        constant_id_ptr.* = @intCast(global_id);
+        try self.updateLines(line, 3);
+    } else {
         const byte: u8 = @intCast(global_id);
         try self.writeChunk(byte, line);
     }

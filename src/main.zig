@@ -4,6 +4,7 @@ const OpCode = Chunk.OpCode;
 const debug = @import("debug.zig");
 const Vm = @import("Vm.zig");
 const Parser = @import("Parser.zig");
+const Table = @import("table.zig").Table;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -57,9 +58,11 @@ fn runFile(path: []const u8, allocator: std.mem.Allocator) !Vm.InterpretResult {
 fn executeSource(source: []u8, allocator: std.mem.Allocator) !Vm.InterpretResult {
     const writer = std.io.getStdOut().writer().any();
     var chunk = Chunk.init(allocator);
-    try Parser.compile(source, &chunk, allocator);
     defer chunk.free();
-    return Vm.interpret(&chunk, allocator, writer);
+    var strings = Table(u8).init(allocator);
+    defer strings.deinit();
+    try Parser.compile(source, &chunk, &strings, allocator);
+    return Vm.interpret(&chunk, &strings, allocator, writer);
 }
 
 fn simpleProgram(allocator: std.mem.Allocator) !void {

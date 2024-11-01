@@ -64,7 +64,6 @@ fn run(self: *Vm, writer: std.io.AnyWriter) !InterpretResult {
         try switch (self.readInstruction()) {
             .Print => try writer.print("{}\n", .{self.pop()}),
             .Return => {
-                try writer.print("{d}\n", .{self.pop()});
                 return .Ok;
             },
             .Constant => {
@@ -233,7 +232,7 @@ fn isFalsey(value: Value) bool {
 }
 
 fn printStack(self: *Vm, writer: std.io.AnyWriter) !void {
-    _ = try writer.write("          ");
+    _ = try writer.write("        > ");
     var slot: [*]Value = self.stack.ptr;
     while (self.stack_top - slot > 0) : (slot += 1) {
         _ = try writer.print("[ {d} ]", .{slot[0]});

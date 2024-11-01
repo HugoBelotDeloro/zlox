@@ -1,11 +1,13 @@
 const std = @import("std");
 const Value = @import("value.zig").Value;
+const Table = @import("table.zig").Table;
 
 const Chunk = @This();
 
 code: std.ArrayList(u8),
 constants: std.ArrayList(Value),
 lines: std.ArrayList(LineInfo),
+strings_indices: Table(usize),
 
 pub const OpCode = enum(u8) {
     Constant,
@@ -46,6 +48,7 @@ pub fn init(alloc: std.mem.Allocator) Chunk {
         .code = std.ArrayList(u8).init(alloc),
         .constants = std.ArrayList(Value).init(alloc),
         .lines = std.ArrayList(LineInfo).init(alloc),
+        .strings_indices = Table(usize).init(alloc),
     };
 }
 
@@ -55,6 +58,7 @@ pub fn from_bytecode(bytecode: []u8, allocator: std.mem.Allocator) Chunk {
         .code = std.ArrayList(u8).fromOwnedSlice(allocator, bytecode),
         .constants = std.ArrayList(Value).init(allocator),
         .lines = std.ArrayList(LineInfo).init(allocator),
+        .strings_indices = Table(usize).init(allocator),
     };
 }
 
@@ -62,6 +66,7 @@ pub fn free(self: *Chunk) void {
     self.code.deinit();
     self.constants.deinit();
     self.lines.deinit();
+    self.strings_indices.deinit();
 }
 
 pub fn writeInstruction(self: *Chunk, instr: OpCode, line: u32) !void {
@@ -75,6 +80,12 @@ pub fn writeChunk(self: *Chunk, byte: u8, line: u32) !void {
 
 /// Writes a constant to the static data and returns its index
 pub fn addConstant(self: *Chunk, value: Value) !usize {
+    if (value.asObj()) |obj| if (obj.asString()) |str| {
+        if (self.strings_indices.get(str)) |i| {
+            return i;
+        }
+        _ = try self.strings_indices.set(str, self.constants.items.len);
+    };
     try self.constants.append(value);
     return self.constants.items.len - 1;
 }

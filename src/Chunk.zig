@@ -18,6 +18,8 @@ pub const OpCode = enum(u8) {
     GetGlobalLong,
     DefineGlobal,
     DefineGlobalLong,
+    SetGlobal,
+    SetGlobalLong,
     Equal,
     Greater,
     Less,

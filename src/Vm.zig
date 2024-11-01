@@ -107,6 +107,20 @@ fn run(self: *Vm, writer: std.io.AnyWriter) !InterpretResult {
                 _ = try self.globals.set(name, self.peek(0));
                 _ = self.pop();
             },
+            .SetGlobal => {
+                const name = try self.readString();
+                if (try self.globals.set(name, self.peek(0))) {
+                    _ = self.globals.delete(name);
+                    return Error.UndefinedSymbol;
+                }
+            },
+            .SetGlobalLong => {
+                const name = try self.readStringLong();
+                if (try self.globals.set(name, self.peek(0))) {
+                    _ = self.globals.delete(name);
+                    return Error.UndefinedSymbol;
+                }
+            },
             .Equal => {
                 const b = self.pop();
                 const a = self.pop();

@@ -18,6 +18,7 @@ const Error = error{
     ExpectIdentifier,
     UnclosedParenthese,
     MissingSemicolon,
+    InvalidAssignmentTarget,
 } || std.mem.Allocator.Error || std.fmt.ParseFloatError;
 
 var error_token: ?Token = null;
@@ -47,8 +48,8 @@ const Precedence = enum {
 };
 
 const ParseRule = struct {
-    prefix: ?*const fn (*Parser) Error!void,
-    infix: ?*const fn (*Parser) Error!void,
+    prefix: ?*const fn (*Parser, bool) Error!void,
+    infix: ?*const fn (*Parser, bool) Error!void,
     precedence: Precedence,
 
     const rules = std.EnumArray(TokenType, ParseRule).init(.{
@@ -130,7 +131,6 @@ fn advance(self: *Parser) Error!void {
 
     while (self.current.typ == .Error) {
         if (self.scanner.next()) |token| {
-            std.debug.print("{any}", .{token});
             self.current = token;
         }
     }
@@ -189,36 +189,47 @@ fn endCompiler(self: *Parser) !void {
     return self.emitInstruction(.Return);
 }
 
-fn number(self: *Parser) Error!void {
+fn number(self: *Parser, can_assign: bool) Error!void {
+    _ = can_assign;
     const value = try std.fmt.parseFloat(f64, self.previous.lexeme);
     return self.emitConstant(Value{
         .Number = value,
     });
 }
 
-fn string(self: *Parser) Error!void {
+fn string(self: *Parser, can_assign: bool) Error!void {
+    _ = can_assign;
     const str = self.previous.lexeme[1 .. self.previous.lexeme.len - 1];
     const str_obj = try self.tryIntern(str);
     const obj = Value.obj(str_obj.getObj());
     try self.chunk.writeConstant(obj, self.previous.line);
 }
 
-fn variable(self: *Parser) Error!void {
-    try self.namedVariable();
+fn variable(self: *Parser, can_assign: bool) Error!void {
+    try self.namedVariable(can_assign);
 }
 
-fn namedVariable(self: *Parser) Error!void {
+fn namedVariable(self: *Parser, can_assign: bool) Error!void {
     const arg = try self.identifierConstant(&self.previous);
-    try self.emitInstruction(if (arg > 255) .GetGlobalLong else .GetGlobal);
-    try self.chunk.writeConstantId(arg, self.previous.line);
+
+    if (can_assign and try self.match(.Equal)) {
+        try self.expression();
+        try self.emitInstruction(if (arg > 255) .SetGlobalLong else .SetGlobal);
+        try self.chunk.writeConstantId(arg, self.previous.line);
+    } else {
+        try self.emitInstruction(if (arg > 255) .GetGlobalLong else .GetGlobal);
+        try self.chunk.writeConstantId(arg, self.previous.line);
+    }
 }
 
-fn grouping(self: *Parser) Error!void {
+fn grouping(self: *Parser, can_assign: bool) Error!void {
+    _ = can_assign;
     try self.expression();
     try self.consume(.RightParen, Error.UnclosedParenthese);
 }
 
-fn unary(self: *Parser) Error!void {
+fn unary(self: *Parser, can_assign: bool) Error!void {
+    _ = can_assign;
     const operator = self.previous.typ;
     try self.parsePrecedence(.Unary);
 
@@ -229,7 +240,8 @@ fn unary(self: *Parser) Error!void {
     }
 }
 
-fn binary(self: *Parser) !void {
+fn binary(self: *Parser, can_assign: bool) !void {
+    _ = can_assign;
     const operator = self.previous.typ;
     const rule = getRule(operator);
 
@@ -250,15 +262,18 @@ fn binary(self: *Parser) !void {
     };
 }
 
-fn nil(self: *Parser) !void {
+fn nil(self: *Parser, can_assign: bool) !void {
+    _ = can_assign;
     try self.emitInstruction(.Nil);
 }
 
-fn @"true"(self: *Parser) !void {
+fn @"true"(self: *Parser, can_assign: bool) !void {
+    _ = can_assign;
     try self.emitInstruction(.True);
 }
 
-fn @"false"(self: *Parser) !void {
+fn @"false"(self: *Parser, can_assign: bool) !void {
+    _ = can_assign;
     try self.emitInstruction(.False);
 }
 
@@ -329,17 +344,20 @@ fn statement(self: *Parser) !void {
 fn parsePrecedence(self: *Parser, precedence: Precedence) Error!void {
     try self.advance();
 
-    if (getRule(self.previous.typ).prefix) |prefixFn| {
-        try prefixFn(self);
-    } else {
-        try self.errorAtCurrent(Error.ExpectExpression);
-    }
+    const prefixRule = getRule(self.previous.typ).prefix orelse return self.errorAtCurrent(Error.ExpectExpression);
+
+    const can_assign = @intFromEnum(precedence) <= @intFromEnum(Precedence.Assignment);
+    try prefixRule(self, can_assign);
 
     while (@intFromEnum(precedence) <= @intFromEnum(getRule(self.current.typ).precedence)) {
         try self.advance();
-        if (getRule(self.previous.typ).infix) |infixFn| {
-            try infixFn(self);
+        if (getRule(self.previous.typ).infix) |infixRule| {
+            try infixRule(self, can_assign);
         } else unreachable;
+    }
+
+    if (can_assign and try self.match(.Equal)) {
+        return self.errorAtCurrent(Error.InvalidAssignmentTarget);
     }
 }
 

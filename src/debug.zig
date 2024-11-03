@@ -25,6 +25,7 @@ pub fn disassembleInstruction(chunk: *const Chunk, offset: usize, writer: std.io
         .Print, .Return, .Equal, .Greater, .Less, .Add, .Subtract, .Multiply, .Divide, .Not, .Negate, .True, .False, .Pop, .Nil => simpleInstruction(instruction, offset, writer),
         .Constant, .GetGlobal, .DefineGlobal, .SetGlobal => constantInstruction(instruction, offset, writer, chunk),
         .ConstantLong, .GetGlobalLong, .DefineGlobalLong, .SetGlobalLong => constantLongInstruction(instruction, offset, writer, chunk),
+        .PopN => byteOpcode(instruction, offset, writer, chunk.code.items[offset + 1]),
         _ => unknownOpcode(instruction, offset, writer),
     };
 }
@@ -53,6 +54,11 @@ fn simpleInstruction(instruction: OpCode, offset: usize, writer: std.io.AnyWrite
 fn unknownOpcode(instruction: OpCode, offset: usize, writer: std.io.AnyWriter) !usize {
     try writer.print("Unknown opcode {d}\n", .{@intFromEnum(instruction)});
     return offset + 1;
+}
+
+fn byteOpcode(instruction: OpCode, offset: usize, writer: std.io.AnyWriter, byte: u8) !usize {
+    try writer.print("{s} {d}", .{@tagName(instruction), byte});
+    return offset + 2;
 }
 
 test "disassembling" {

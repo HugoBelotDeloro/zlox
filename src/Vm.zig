@@ -80,6 +80,11 @@ fn run(self: *Vm, writer: std.io.AnyWriter) !InterpretResult {
             .Pop => {
                 _ = self.pop();
             },
+            .PopN => {
+                const n = self.ip[0];
+                self.ip += 1;
+                self.popN(n);
+            },
             .GetGlobal => {
                 const name = try self.readString();
                 if (self.globals.get(name)) |global| {
@@ -189,6 +194,10 @@ fn push(self: *Vm, value: Value) !void {
 fn pop(self: *Vm) Value {
     self.stack_top -= 1;
     return self.stack_top[0];
+}
+
+fn popN(self: *Vm, n: usize) void {
+    self.stack_top -= n;
 }
 
 fn readInstruction(self: *Vm) OpCode {

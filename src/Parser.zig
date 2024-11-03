@@ -13,12 +13,15 @@ const Parser = @This();
 const DebugPrintChunk = true and !@import("builtin").is_test;
 
 const Error = error{
+    AlreadyDeclared,
     ExpectEndOfExpression,
     ExpectExpression,
     ExpectIdentifier,
+    UnclosedBlock,
     UnclosedParenthese,
     MissingSemicolon,
     InvalidAssignmentTarget,
+    TooManyLocalVariables,
 } || std.mem.Allocator.Error || std.fmt.ParseFloatError;
 
 var error_token: ?Token = null;
@@ -28,6 +31,7 @@ previous: Token,
 scanner: Scanner,
 chunk: *Chunk,
 strings: *Table(u8),
+compiler: Compiler,
 had_error: bool = false,
 panic_mode: bool = false,
 
@@ -96,11 +100,27 @@ const ParseRule = struct {
     });
 };
 
+const Local = struct {
+    name: Token,
+    depth: i16,
+};
+
+const Compiler = struct {
+    locals: [std.math.maxInt(u8) + 1]Local,
+    localCount: u8,
+    scopeDepth: usize,
+};
+
 fn init(source: []const u8, chunk: *Chunk, strings: *Table(u8), alloc: std.mem.Allocator) Parser {
     return Parser{
         .scanner = Scanner.init(source),
         .chunk = chunk,
         .strings = strings,
+        .compiler = Compiler{
+            .locals = undefined,
+            .localCount = 0,
+            .scopeDepth = 0,
+        },
         .previous = undefined,
         .current = undefined,
         .alloc = alloc,
@@ -187,6 +207,22 @@ fn errorAt(self: *Parser, token: *Token, err: Error) Error!void {
 
 fn endCompiler(self: *Parser) !void {
     return self.emitInstruction(.Return);
+}
+
+fn beginScope(self: *Parser) void {
+    self.compiler.scopeDepth += 1;
+}
+
+fn endScope(self: *Parser) !void {
+    self.compiler.scopeDepth -= 1;
+
+    const initial: u8 = self.compiler.localCount;
+    while (self.compiler.localCount > 0 and self.compiler.locals[self.compiler.localCount - 1].depth > self.compiler.scopeDepth) {
+        self.compiler.localCount -= 1;
+    }
+
+    try self.emitInstruction(.PopN);
+    try self.emitInstruction(@enumFromInt(initial - self.compiler.localCount));
 }
 
 fn number(self: *Parser, can_assign: bool) Error!void {
@@ -281,6 +317,14 @@ fn expression(self: *Parser) !void {
     try self.parsePrecedence(.Assignment);
 }
 
+fn block(self: *Parser) !void {
+    while (!self.check(.RightBrace) and !self.check(.Eof)) {
+        try self.declaration();
+    }
+
+    try self.consume(.RightBrace, Error.UnclosedBlock);
+}
+
 fn varDeclaration(self: *Parser) !void {
     const global_id = try self.parseVariable(Error.ExpectIdentifier);
 
@@ -323,7 +367,7 @@ fn discardTokens(self: *Parser) !bool {
     return false;
 }
 
-fn declaration(self: *Parser) !void {
+fn declaration(self: *Parser) Error!void {
     if (try self.match(.Var)) {
         try self.varDeclaration();
     } else {
@@ -336,6 +380,11 @@ fn declaration(self: *Parser) !void {
 fn statement(self: *Parser) !void {
     if (try self.match(.Print)) {
         return self.printStatement();
+    }
+    if (try self.match(.LeftBrace)) {
+        self.beginScope();
+        try self.block();
+        try self.endScope();
     } else {
         return self.expressionStatement();
     }
@@ -367,6 +416,30 @@ fn identifierConstant(self: *Parser, token: *Token) !usize {
     return self.chunk.addConstant(val);
 }
 
+fn addLocal(self: *Parser, name: Token) !void {
+    if (self.compiler.localCount == std.math.maxInt(u8))
+        return Error.TooManyLocalVariables;
+    const local = &self.compiler.locals[self.compiler.localCount];
+    self.compiler.localCount += 1;
+    local.name = name;
+    local.depth = @intCast(self.compiler.scopeDepth);
+}
+
+fn declareVariable(self: *Parser) !void {
+    if (self.compiler.scopeDepth == 0) return;
+
+    const name = &self.previous;
+    var i: i16 = @intCast(self.compiler.localCount);
+    while (i >= 0) : (i -= 1) {
+        const local = &self.compiler.locals[@intCast(i)];
+        if (local.depth != -1 and local.depth < self.compiler.scopeDepth) break;
+
+        if (std.mem.eql(u8, name.lexeme, local.name.lexeme))
+            return Error.AlreadyDeclared;
+    }
+    try self.addLocal(name.*);
+}
+
 fn tryIntern(self: *Parser, str: []const u8) !*Obj.String {
     const hash = Obj.String.hash(str);
     if (self.strings.findString(str, hash)) |obj| {
@@ -379,10 +452,15 @@ fn tryIntern(self: *Parser, str: []const u8) !*Obj.String {
 
 fn parseVariable(self: *Parser, err: Error) !usize {
     try self.consume(.Identifier, err);
+
+    try self.declareVariable();
+    if (self.compiler.scopeDepth > 0) return 0;
+
     return self.identifierConstant(&self.previous);
 }
 
 fn defineVariable(self: *Parser, global_id: usize) !void {
+    if (self.compiler.scopeDepth > 0) return;
     return self.chunk.writeGlobal(global_id, self.previous.line);
 }
 

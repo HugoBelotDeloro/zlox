@@ -102,13 +102,13 @@ const ParseRule = struct {
 
 const Local = struct {
     name: Token,
-    depth: i16,
+    depth: ?u8,
 };
 
 const Compiler = struct {
     locals: [std.math.maxInt(u8) + 1]Local,
     localCount: u8,
-    scopeDepth: usize,
+    scopeDepth: u8,
 };
 
 fn init(source: []const u8, chunk: *Chunk, strings: *Table(u8), alloc: std.mem.Allocator) Parser {
@@ -217,7 +217,8 @@ fn endScope(self: *Parser) !void {
     self.compiler.scopeDepth -= 1;
 
     const initial: u8 = self.compiler.localCount;
-    while (self.compiler.localCount > 0 and self.compiler.locals[self.compiler.localCount - 1].depth > self.compiler.scopeDepth) {
+    while (self.compiler.localCount > 0 and (self.compiler.locals[self.compiler.localCount - 1].depth
+orelse 0) > self.compiler.scopeDepth) {
         self.compiler.localCount -= 1;
     }
 
@@ -246,15 +247,24 @@ fn variable(self: *Parser, can_assign: bool) Error!void {
 }
 
 fn namedVariable(self: *Parser, can_assign: bool) Error!void {
-    const arg = try self.identifierConstant(&self.previous);
+    const arg = self.resolveLocal(&self.previous);
+    const x: usize = if (arg == null) 1 else 0;
+    const y: usize = if (arg orelse 0 <= 255) 0 else 1;
+    const opcodes: [2][2][2]OpCode = .{ .{ .{.SetLocal, undefined},
+        .{.GetLocal, undefined}},
+        .{.{.SetGlobal, .SetGlobalLong},
+        .{.GetGlobal, .GetGlobalLong}}};
+    const set_op = opcodes[x][0][y];
+    const get_op = opcodes[x][1][y];
+    const arg2: usize = arg orelse try self.identifierConstant(&self.previous);
 
     if (can_assign and try self.match(.Equal)) {
         try self.expression();
-        try self.emitInstruction(if (arg > 255) .SetGlobalLong else .SetGlobal);
-        try self.chunk.writeConstantId(arg, self.previous.line);
+        try self.emitInstruction(set_op);
+        try self.chunk.writeConstantId(arg2, self.previous.line);
     } else {
-        try self.emitInstruction(if (arg > 255) .GetGlobalLong else .GetGlobal);
-        try self.chunk.writeConstantId(arg, self.previous.line);
+        try self.emitInstruction(get_op);
+        try self.chunk.writeConstantId(arg2, self.previous.line);
     }
 }
 
@@ -416,26 +426,42 @@ fn identifierConstant(self: *Parser, token: *Token) !usize {
     return self.chunk.addConstant(val);
 }
 
+fn resolveLocal(self: *Parser, name: *Token) ?u8 {
+    var i: u8 = 0;
+    while (i < self.compiler.localCount) : (i += 1) {
+        const local = &self.compiler.locals[self.compiler.localCount - i - 1];
+        if (std.mem.eql(u8, name.lexeme, local.name.lexeme)) {
+            return self.compiler.localCount - i - 1;
+        }
+
+        if (i == self.compiler.localCount) break;
+    }
+
+    return null;
+}
+
 fn addLocal(self: *Parser, name: Token) !void {
     if (self.compiler.localCount == std.math.maxInt(u8))
         return Error.TooManyLocalVariables;
     const local = &self.compiler.locals[self.compiler.localCount];
     self.compiler.localCount += 1;
     local.name = name;
-    local.depth = @intCast(self.compiler.scopeDepth);
+    local.depth = self.compiler.scopeDepth;
 }
 
 fn declareVariable(self: *Parser) !void {
     if (self.compiler.scopeDepth == 0) return;
 
     const name = &self.previous;
-    var i: i16 = @intCast(self.compiler.localCount);
-    while (i >= 0) : (i -= 1) {
-        const local = &self.compiler.locals[@intCast(i)];
-        if (local.depth != -1 and local.depth < self.compiler.scopeDepth) break;
+    var i: u8 = 0;
+    while (i < self.compiler.localCount) : (i += 1) {
+        const local = &self.compiler.locals[self.compiler.localCount - i - 1];
+        if (local.depth) |depth| if (depth < self.compiler.scopeDepth) break;
 
         if (std.mem.eql(u8, name.lexeme, local.name.lexeme))
             return Error.AlreadyDeclared;
+
+        if (i == self.compiler.localCount) break;
     }
     try self.addLocal(name.*);
 }

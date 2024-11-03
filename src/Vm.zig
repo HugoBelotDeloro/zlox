@@ -85,6 +85,16 @@ fn run(self: *Vm, writer: std.io.AnyWriter) !InterpretResult {
                 self.ip += 1;
                 self.popN(n);
             },
+            .GetLocal => {
+                const slot = self.ip[0];
+                self.ip += 1;
+                try self.push(self.stack[slot]);
+            },
+            .SetLocal => {
+                const slot = self.ip[0];
+                self.ip += 1;
+                self.stack[slot] = self.peek(0);
+            },
             .GetGlobal => {
                 const name = try self.readString();
                 if (self.globals.get(name)) |global| {

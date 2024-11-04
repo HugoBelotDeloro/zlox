@@ -22,6 +22,7 @@ const Error = error{
     MissingSemicolon,
     InvalidAssignmentTarget,
     TooManyLocalVariables,
+    VariableUsedInItsOwnInitialization,
 } || std.mem.Allocator.Error || std.fmt.ParseFloatError;
 
 var error_token: ?Token = null;
@@ -147,7 +148,7 @@ pub fn compile(source: []const u8, chunk: *Chunk, strings: *Table(u8), alloc: st
 
 fn advance(self: *Parser) Error!void {
     self.previous = self.current;
-    self.current = self.scanner.next() orelse return Error.ExpectEndOfExpression;
+    self.current = self.scanner.next() orelse return self.errorAtCurrent(Error.ExpectEndOfExpression);
 
     while (self.current.typ == .Error) {
         if (self.scanner.next()) |token| {
@@ -161,7 +162,7 @@ fn consume(self: *Parser, typ: TokenType, err: Error) Error!void {
         try self.advance();
         return;
     }
-    try self.errorAtCurrent(err);
+    return self.errorAtCurrent(err);
 }
 
 fn check(self: *Parser, typ: TokenType) bool {
@@ -192,12 +193,12 @@ fn emitConstant(self: *Parser, constant: Value) !void {
     return self.chunk.writeConstant(constant, self.previous.line);
 }
 
-fn errorAtCurrent(self: *Parser, err: Error) Error!void {
-    try self.errorAt(&self.current, err);
+fn errorAtCurrent(self: *Parser, err: Error) Error {
+    return self.errorAt(&self.current, err);
 }
 
-fn errorAt(self: *Parser, token: *Token, err: Error) Error!void {
-    if (self.panic_mode) return;
+fn errorAt(self: *Parser, token: *Token, err: Error) Error {
+    if (self.panic_mode) return err;
     self.panic_mode = true;
     self.had_error = true;
 
@@ -247,7 +248,7 @@ fn variable(self: *Parser, can_assign: bool) Error!void {
 }
 
 fn namedVariable(self: *Parser, can_assign: bool) Error!void {
-    const arg = self.resolveLocal(&self.previous);
+    const arg = try self.resolveLocal(&self.previous);
     const x: usize = if (arg == null) 1 else 0;
     const y: usize = if (arg orelse 0 <= 255) 0 else 1;
     const opcodes: [2][2][2]OpCode = .{ .{ .{.SetLocal, undefined},
@@ -426,11 +427,12 @@ fn identifierConstant(self: *Parser, token: *Token) !usize {
     return self.chunk.addConstant(val);
 }
 
-fn resolveLocal(self: *Parser, name: *Token) ?u8 {
+fn resolveLocal(self: *Parser, name: *Token) !?u8 {
     var i: u8 = 0;
     while (i < self.compiler.localCount) : (i += 1) {
         const local = &self.compiler.locals[self.compiler.localCount - i - 1];
         if (std.mem.eql(u8, name.lexeme, local.name.lexeme)) {
+            if (local.depth == null) return self.errorAtCurrent(Error.VariableUsedInItsOwnInitialization);
             return self.compiler.localCount - i - 1;
         }
 
@@ -442,11 +444,11 @@ fn resolveLocal(self: *Parser, name: *Token) ?u8 {
 
 fn addLocal(self: *Parser, name: Token) !void {
     if (self.compiler.localCount == std.math.maxInt(u8))
-        return Error.TooManyLocalVariables;
+        return self.errorAtCurrent(Error.TooManyLocalVariables);
     const local = &self.compiler.locals[self.compiler.localCount];
     self.compiler.localCount += 1;
     local.name = name;
-    local.depth = self.compiler.scopeDepth;
+    local.depth = null;
 }
 
 fn declareVariable(self: *Parser) !void {
@@ -459,7 +461,7 @@ fn declareVariable(self: *Parser) !void {
         if (local.depth) |depth| if (depth < self.compiler.scopeDepth) break;
 
         if (std.mem.eql(u8, name.lexeme, local.name.lexeme))
-            return Error.AlreadyDeclared;
+            return self.errorAtCurrent(Error.AlreadyDeclared);
 
         if (i == self.compiler.localCount) break;
     }
@@ -485,8 +487,15 @@ fn parseVariable(self: *Parser, err: Error) !usize {
     return self.identifierConstant(&self.previous);
 }
 
+fn markInitialized(self: *Parser) void {
+    self.compiler.locals[self.compiler.localCount - 1].depth = self.compiler.scopeDepth;
+}
+
 fn defineVariable(self: *Parser, global_id: usize) !void {
-    if (self.compiler.scopeDepth > 0) return;
+    if (self.compiler.scopeDepth > 0) {
+        self.markInitialized();
+        return;
+    }
     return self.chunk.writeGlobal(global_id, self.previous.line);
 }
 

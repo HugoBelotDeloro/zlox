@@ -26,6 +26,7 @@ pub fn disassembleInstruction(chunk: *const Chunk, offset: usize, writer: std.io
         .Constant, .GetGlobal, .DefineGlobal, .SetGlobal => constantInstruction(instruction, offset, writer, chunk),
         .ConstantLong, .GetGlobalLong, .DefineGlobalLong, .SetGlobalLong => constantLongInstruction(instruction, offset, writer, chunk),
         .PopN, .GetLocal, .SetLocal => byteInstruction(instruction, offset, writer, chunk.code.items[offset + 1]),
+        .JumpIfFalse => jumpInstruction(instruction, 1, chunk, offset, writer),
         _ => unknownOpcode(instruction, offset, writer),
     };
 }
@@ -57,8 +58,14 @@ fn unknownOpcode(instruction: OpCode, offset: usize, writer: std.io.AnyWriter) !
 }
 
 fn byteInstruction(instruction: OpCode, offset: usize, writer: std.io.AnyWriter, byte: u8) !usize {
-    try writer.print("{s: <16} {d: >4}\n", .{@tagName(instruction), byte});
+    try writer.print("{s: <16} {d: >4}\n", .{ @tagName(instruction), byte });
     return offset + 2;
+}
+
+fn jumpInstruction(instr: OpCode, sign: i32, chunk: *const Chunk, offset: usize, writer: std.io.AnyWriter) !usize {
+    const jump: u16 = (@as(u16, chunk.code.items[offset + 1]) << 8) | (chunk.code.items[offset + 2]);
+    try writer.print("{s: <16} {d: >4} -> {d}\n", .{ @tagName(instr), offset, @as(i32, @intCast(offset)) + 3 + sign * jump });
+    return offset + 3;
 }
 
 test "disassembling" {

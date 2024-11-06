@@ -17,6 +17,9 @@ const Error = error{
     ExpectEndOfExpression,
     ExpectExpression,
     ExpectIdentifier,
+    ExpectOpenParen,
+    ExpectClosingParen,
+    JumpTooLong,
     UnclosedBlock,
     UnclosedParenthese,
     MissingSemicolon,
@@ -181,7 +184,7 @@ fn emitInstruction(self: *Parser, instr: OpCode) !void {
 
 fn emitInstructions(self: *Parser, instructions: anytype) !void {
     inline for (instructions) |instruction| {
-        if (@TypeOf(instruction) == u8) {
+        if (@TypeOf(instruction) == u8 or @TypeOf(instruction) == comptime_int) {
             try self.emitInstruction(@enumFromInt(instruction));
         } else {
             try self.emitInstruction(instruction);
@@ -191,6 +194,22 @@ fn emitInstructions(self: *Parser, instructions: anytype) !void {
 
 fn emitConstant(self: *Parser, constant: Value) !void {
     return self.chunk.writeConstant(constant, self.previous.line);
+}
+
+fn emitJump(self: *Parser, instr: OpCode) !usize {
+    try self.emitInstructions(.{ instr, 0xff, 0xff });
+    return self.chunk.code.items.len - 2;
+}
+
+fn patchJump(self: *Parser, offset: usize) !void {
+    const jump: u16 = @intCast(self.chunk.code.items.len - offset - 2);
+
+    if (jump > std.math.maxInt(u16)) {
+        return self.errorAtCurrent(Error.JumpTooLong);
+    }
+
+    self.chunk.code.items[offset] = @truncate(jump >> 8);
+    self.chunk.code.items[offset + 1] = @truncate(jump);
 }
 
 fn errorAtCurrent(self: *Parser, err: Error) Error {
@@ -218,8 +237,7 @@ fn endScope(self: *Parser) !void {
     self.compiler.scopeDepth -= 1;
 
     const initial: u8 = self.compiler.localCount;
-    while (self.compiler.localCount > 0 and (self.compiler.locals[self.compiler.localCount - 1].depth
-orelse 0) > self.compiler.scopeDepth) {
+    while (self.compiler.localCount > 0 and (self.compiler.locals[self.compiler.localCount - 1].depth orelse 0) > self.compiler.scopeDepth) {
         self.compiler.localCount -= 1;
     }
 
@@ -251,10 +269,7 @@ fn namedVariable(self: *Parser, can_assign: bool) Error!void {
     const arg = try self.resolveLocal(&self.previous);
     const x: usize = if (arg == null) 1 else 0;
     const y: usize = if (arg orelse 0 <= 255) 0 else 1;
-    const opcodes: [2][2][2]OpCode = .{ .{ .{.SetLocal, undefined},
-        .{.GetLocal, undefined}},
-        .{.{.SetGlobal, .SetGlobalLong},
-        .{.GetGlobal, .GetGlobalLong}}};
+    const opcodes: [2][2][2]OpCode = .{ .{ .{ .SetLocal, undefined }, .{ .GetLocal, undefined } }, .{ .{ .SetGlobal, .SetGlobalLong }, .{ .GetGlobal, .GetGlobalLong } } };
     const set_op = opcodes[x][0][y];
     const get_op = opcodes[x][1][y];
     const arg2: usize = arg orelse try self.identifierConstant(&self.previous);
@@ -355,6 +370,17 @@ fn expressionStatement(self: *Parser) !void {
     try self.emitInstruction(.Pop);
 }
 
+fn ifStatement(self: *Parser) !void {
+    try self.consume(.LeftParen, Error.ExpectOpenParen);
+    try self.expression();
+    try self.consume(.RightParen, Error.ExpectClosingParen);
+
+    const then_jump = try self.emitJump(.JumpIfFalse);
+    try self.statement();
+
+    try self.patchJump(then_jump);
+}
+
 fn printStatement(self: *Parser) !void {
     try self.expression();
     try self.consume(.Semicolon, Error.MissingSemicolon);
@@ -388,9 +414,11 @@ fn declaration(self: *Parser) Error!void {
     if (self.panic_mode) try self.synchronize();
 }
 
-fn statement(self: *Parser) !void {
+fn statement(self: *Parser) Error!void {
     if (try self.match(.Print)) {
         return self.printStatement();
+    } else if (try self.match(.If)) {
+        return self.ifStatement();
     }
     if (try self.match(.LeftBrace)) {
         self.beginScope();

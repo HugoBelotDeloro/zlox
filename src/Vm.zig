@@ -63,6 +63,10 @@ fn run(self: *Vm, writer: std.io.AnyWriter) !InterpretResult {
 
         try switch (self.readInstruction()) {
             .Print => try writer.print("{}\n", .{self.pop()}),
+            .JumpIfFalse => {
+                const offset = self.readShort();
+                if (isFalsey(self.peek(0))) self.ip += offset;
+            },
             .Return => {
                 return .Ok;
             },
@@ -220,6 +224,12 @@ fn readConstant(self: *Vm) Value {
     const id = self.ip[0];
     self.ip += 1;
     return self.chunk.constants.items[id];
+}
+
+fn readShort(self: *Vm) u16 {
+    const val: u16 = @as(u16, self.ip[0]) << 8 | self.ip[1];
+    self.ip += 2;
+    return val;
 }
 
 fn readString(self: *Vm) !*Obj.String {

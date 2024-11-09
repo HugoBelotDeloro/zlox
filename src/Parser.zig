@@ -376,9 +376,16 @@ fn ifStatement(self: *Parser) !void {
     try self.consume(.RightParen, Error.ExpectClosingParen);
 
     const then_jump = try self.emitJump(.JumpIfFalse);
+    try self.emitInstruction(.Pop);
     try self.statement();
 
+    const else_jump = try self.emitJump(.Jump);
+
     try self.patchJump(then_jump);
+    try self.emitInstruction(.Pop);
+
+    if (try self.match(.Else)) try self.statement();
+    try self.patchJump(else_jump);
 }
 
 fn printStatement(self: *Parser) !void {

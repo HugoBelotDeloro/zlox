@@ -63,6 +63,10 @@ fn run(self: *Vm, writer: std.io.AnyWriter) !InterpretResult {
 
         try switch (self.readInstruction()) {
             .Print => try writer.print("{}\n", .{self.pop()}),
+            .Jump => {
+                const offset = self.readShort();
+                self.ip += offset;
+            },
             .JumpIfFalse => {
                 const offset = self.readShort();
                 if (isFalsey(self.peek(0))) self.ip += offset;

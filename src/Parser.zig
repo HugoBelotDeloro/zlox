@@ -83,7 +83,7 @@ const ParseRule = struct {
         .Identifier = .{ .prefix = variable, .infix = null, .precedence = .None },
         .String = .{ .prefix = string, .infix = null, .precedence = .None },
         .Number = .{ .prefix = number, .infix = null, .precedence = .None },
-        .And = .{ .prefix = null, .infix = null, .precedence = .None },
+        .And = .{ .prefix = null, .infix = @"and", .precedence = .And },
         .Class = .{ .prefix = null, .infix = null, .precedence = .None },
         .Else = .{ .prefix = null, .infix = null, .precedence = .None },
         .False = .{ .prefix = @"false", .infix = null, .precedence = .None },
@@ -91,7 +91,7 @@ const ParseRule = struct {
         .Fun = .{ .prefix = null, .infix = null, .precedence = .None },
         .If = .{ .prefix = null, .infix = null, .precedence = .None },
         .Nil = .{ .prefix = nil, .infix = null, .precedence = .None },
-        .Or = .{ .prefix = null, .infix = null, .precedence = .None },
+        .Or = .{ .prefix = null, .infix = @"or", .precedence = .Or },
         .Print = .{ .prefix = null, .infix = null, .precedence = .None },
         .Return = .{ .prefix = null, .infix = null, .precedence = .None },
         .Super = .{ .prefix = null, .infix = null, .precedence = .None },
@@ -251,6 +251,19 @@ fn number(self: *Parser, can_assign: bool) Error!void {
     return self.emitConstant(Value{
         .Number = value,
     });
+}
+
+fn @"or"(self: *Parser, can_assign: bool) !void {
+    _ = can_assign;
+
+    const else_jump = try self.emitJump(.JumpIfFalse);
+    const jump = try self.emitJump(.Jump);
+
+    try self.patchJump(else_jump);
+    try self.emitInstruction(.Pop);
+
+    try self.parsePrecedence(.Or);
+    try self.patchJump(jump);
 }
 
 fn string(self: *Parser, can_assign: bool) Error!void {
@@ -532,6 +545,17 @@ fn defineVariable(self: *Parser, global_id: usize) !void {
         return;
     }
     return self.chunk.writeGlobal(global_id, self.previous.line);
+}
+
+fn @"and"(self: *Parser, can_assign: bool) !void {
+    _ = can_assign;
+
+    const jump = try self.emitJump(.JumpIfFalse);
+
+    try self.emitInstruction(.Pop);
+    try self.parsePrecedence(.And);
+
+    try self.patchJump(jump);
 }
 
 fn getRule(typ: TokenType) ParseRule {

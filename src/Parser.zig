@@ -37,6 +37,7 @@ compiler: Compiler,
 had_error: bool = false,
 panic_mode: bool = false,
 continue_offsets: std.ArrayList(usize),
+break_jumps: std.ArrayList(std.ArrayList(usize)),
 
 alloc: std.mem.Allocator,
 
@@ -84,6 +85,7 @@ const ParseRule = struct {
         .String = .{ .prefix = string, .infix = null, .precedence = .None },
         .Number = .{ .prefix = number, .infix = null, .precedence = .None },
         .And = .{ .prefix = null, .infix = @"and", .precedence = .And },
+        .Break = .{ .prefix = null, .infix = null, .precedence = .None },
         .Case = .{ .prefix = null, .infix = null, .precedence = .None },
         .Class = .{ .prefix = null, .infix = null, .precedence = .None },
         .Continue = .{ .prefix = null, .infix = null, .precedence = .None },
@@ -132,13 +134,16 @@ fn init(source: []const u8, chunk: *Chunk, strings: *Table(u8), alloc: std.mem.A
         .previous = undefined,
         .current = undefined,
         .continue_offsets = std.ArrayList(usize).init(alloc),
+        .break_jumps = std.ArrayList(std.ArrayList(usize)).init(alloc),
         .alloc = alloc,
     };
 }
 
 fn deinit(self: *Parser) void {
     std.debug.assert(self.continue_offsets.items.len == 0);
+    std.debug.assert(self.break_jumps.items.len == 0);
     self.continue_offsets.deinit();
+    self.break_jumps.deinit();
 }
 
 pub fn compile(source: []const u8, chunk: *Chunk, strings: *Table(u8), alloc: std.mem.Allocator) !void {
@@ -263,6 +268,22 @@ fn endScope(self: *Parser) !void {
 
     try self.emitInstruction(.PopN);
     try self.emitInstruction(@enumFromInt(initial - self.compiler.localCount));
+}
+
+fn beginLoop(self: *Parser) !usize {
+    const loop_start = self.chunk.code.items.len;
+    try self.continue_offsets.append(loop_start);
+    try self.break_jumps.append(std.ArrayList(usize).init(self.alloc));
+    return loop_start;
+}
+
+fn endLoop(self: *Parser) !void {
+    for (self.break_jumps.getLast().items) |jump| {
+        try self.patchJump(jump);
+    }
+
+    _ = self.continue_offsets.pop();
+    _ = self.break_jumps.pop();
 }
 
 fn number(self: *Parser, can_assign: bool) Error!void {
@@ -414,9 +435,7 @@ fn forStatement(self: *Parser) !void {
         }
     }
 
-    var loop_start = self.chunk.code.items.len;
-    try self.continue_offsets.append(loop_start);
-    defer _ = self.continue_offsets.pop();
+    var loop_start = try self.beginLoop();
 
     const exit_jump: ?usize = blk: {
         if (try self.match(.Semicolon)) break :blk null;
@@ -449,6 +468,7 @@ fn forStatement(self: *Parser) !void {
         try self.emitInstruction(.Pop);
     }
 
+    try self.endLoop();
     try self.endScope();
 }
 
@@ -528,6 +548,14 @@ fn continueStatement(self: *Parser) !void {
     try self.consume(.Semicolon);
 }
 
+fn breakStatement(self: *Parser) !void {
+    if (self.break_jumps.items.len == 0) return Error.NotInLoop;
+
+    const jumps_list = &self.break_jumps.items[self.break_jumps.items.len - 1];
+    try jumps_list.append(try self.emitJump(.Jump));
+    try self.consume(.Semicolon);
+}
+
 fn printStatement(self: *Parser) !void {
     try self.expression();
     try self.consume(.Semicolon);
@@ -535,10 +563,7 @@ fn printStatement(self: *Parser) !void {
 }
 
 fn whileStatement(self: *Parser) !void {
-    const loop_start = self.chunk.code.items.len;
-
-    try self.continue_offsets.append(loop_start);
-    defer _ = self.continue_offsets.pop();
+    const loop_start = try self.beginLoop();
 
     try self.consume(.LeftParen);
     try self.expression();
@@ -551,6 +576,8 @@ fn whileStatement(self: *Parser) !void {
 
     try self.patchJump(exit_jump);
     try self.emitInstruction(.Pop);
+
+    try self.endLoop();
 }
 
 fn synchronize(self: *Parser) !void {
@@ -593,6 +620,8 @@ fn statement(self: *Parser) Error!void {
         return self.switchStatement();
     if (try self.match(.Continue))
         return self.continueStatement();
+    if (try self.match(.Break))
+        return self.breakStatement();
 
     if (try self.match(.LeftBrace)) {
         self.beginScope();

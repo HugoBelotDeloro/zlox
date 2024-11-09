@@ -16,19 +16,16 @@ const Error = error{
     AlreadyDeclared,
     ExpectEndOfExpression,
     ExpectExpression,
-    ExpectIdentifier,
-    ExpectOpenParen,
-    ExpectClosingParen,
+    Unexpected,
     JumpTooLong,
-    UnclosedBlock,
-    UnclosedParenthese,
-    MissingSemicolon,
     InvalidAssignmentTarget,
     TooManyLocalVariables,
     VariableUsedInItsOwnInitialization,
 } || std.mem.Allocator.Error || std.fmt.ParseFloatError;
 
 var error_token: ?Token = null;
+
+var expected: ?[]const u8 = null;
 
 current: Token,
 previous: Token,
@@ -137,16 +134,15 @@ pub fn compile(source: []const u8, chunk: *Chunk, strings: *Table(u8), alloc: st
     try self.advance();
 
     while (self.current.typ != .Eof) {
-        self.declaration() catch |err| try reportError(error_token.?, @errorName(err), std.io.getStdErr().writer().any());
+        self.declaration() catch |err| try reportError(error_token.?, err, std.io.getStdErr().writer().any());
     }
-    try self.consume(.Eof, Error.ExpectEndOfExpression);
+    try self.consume(.Eof);
     try self.endCompiler();
 
-    if (self.had_error) {
+    if (self.had_error)
         return error.ParsingError;
-    } else if (DebugPrintChunk) {
+    if (DebugPrintChunk)
         try @import("debug.zig").disassembleChunk(self.chunk, "compilation result", std.io.getStdErr().writer().any());
-    }
 }
 
 fn advance(self: *Parser) Error!void {
@@ -160,12 +156,13 @@ fn advance(self: *Parser) Error!void {
     }
 }
 
-fn consume(self: *Parser, typ: TokenType, err: Error) Error!void {
+fn consume(self: *Parser, typ: TokenType) Error!void {
     if (self.current.typ == typ) {
         try self.advance();
         return;
     }
-    return self.errorAtCurrent(err);
+    expected = @tagName(typ);
+    return self.errorAtCurrent(Error.Unexpected);
 }
 
 fn check(self: *Parser, typ: TokenType) bool {
@@ -309,7 +306,7 @@ fn namedVariable(self: *Parser, can_assign: bool) Error!void {
 fn grouping(self: *Parser, can_assign: bool) Error!void {
     _ = can_assign;
     try self.expression();
-    try self.consume(.RightParen, Error.UnclosedParenthese);
+    try self.consume(.RightParen);
 }
 
 fn unary(self: *Parser, can_assign: bool) Error!void {
@@ -370,31 +367,31 @@ fn block(self: *Parser) !void {
         try self.declaration();
     }
 
-    try self.consume(.RightBrace, Error.UnclosedBlock);
+    try self.consume(.RightBrace);
 }
 
 fn varDeclaration(self: *Parser) !void {
-    const global_id = try self.parseVariable(Error.ExpectIdentifier);
+    const global_id = try self.parseVariable();
 
     if (try self.match(.Equal)) {
         try self.expression();
     } else {
         try self.emitInstruction(.Nil);
     }
-    try self.consume(.Semicolon, Error.MissingSemicolon);
+    try self.consume(.Semicolon);
 
     try self.defineVariable(global_id);
 }
 
 fn expressionStatement(self: *Parser) !void {
     try self.expression();
-    try self.consume(.Semicolon, Error.MissingSemicolon);
+    try self.consume(.Semicolon);
     try self.emitInstruction(.Pop);
 }
 
 fn forStatement(self: *Parser) !void {
     self.beginScope();
-    try self.consume(.LeftParen, Error.ExpectOpenParen);
+    try self.consume(.LeftParen);
     if (!try self.match(.Semicolon)) {
         if (try self.match(.Var)) {
             try self.varDeclaration();
@@ -407,7 +404,7 @@ fn forStatement(self: *Parser) !void {
     const exit_jump: ?usize = blk: {
         if (try self.match(.Semicolon)) break :blk null;
         try self.expression();
-        try self.consume(.Semicolon, Error.MissingSemicolon);
+        try self.consume(.Semicolon);
 
         const exit_jump = try self.emitJump(.JumpIfFalse);
         try self.emitInstruction(.Pop);
@@ -419,7 +416,7 @@ fn forStatement(self: *Parser) !void {
         const increment_start = self.chunk.code.items.len;
         try self.expression();
         try self.emitInstruction(.Pop);
-        try self.consume(.RightParen, Error.ExpectClosingParen);
+        try self.consume(.RightParen);
 
         try self.emitLoop(loop_start);
         loop_start = increment_start;
@@ -438,9 +435,9 @@ fn forStatement(self: *Parser) !void {
 }
 
 fn ifStatement(self: *Parser) !void {
-    try self.consume(.LeftParen, Error.ExpectOpenParen);
+    try self.consume(.LeftParen);
     try self.expression();
-    try self.consume(.RightParen, Error.ExpectClosingParen);
+    try self.consume(.RightParen);
 
     const then_jump = try self.emitJump(.JumpIfFalse);
     try self.emitInstruction(.Pop);
@@ -457,15 +454,15 @@ fn ifStatement(self: *Parser) !void {
 
 fn printStatement(self: *Parser) !void {
     try self.expression();
-    try self.consume(.Semicolon, Error.MissingSemicolon);
+    try self.consume(.Semicolon);
     try self.emitInstruction(.Print);
 }
 
 fn whileStatement(self: *Parser) !void {
     const loop_start = self.chunk.code.items.len;
-    try self.consume(.LeftParen, Error.ExpectOpenParen);
+    try self.consume(.LeftParen);
     try self.expression();
-    try self.consume(.RightParen, Error.ExpectClosingParen);
+    try self.consume(.RightParen);
 
     const exit_jump = try self.emitJump(.JumpIfFalse);
     try self.emitInstruction(.Pop);
@@ -599,8 +596,8 @@ fn tryIntern(self: *Parser, str: []const u8) !*Obj.String {
     return obj;
 }
 
-fn parseVariable(self: *Parser, err: Error) !usize {
-    try self.consume(.Identifier, err);
+fn parseVariable(self: *Parser) !usize {
+    try self.consume(.Identifier);
 
     try self.declareVariable();
     if (self.compiler.scopeDepth > 0) return 0;
@@ -635,14 +632,17 @@ fn getRule(typ: TokenType) ParseRule {
     return ParseRule.rules.get(typ);
 }
 
-fn reportError(token: Token, msg: []const u8, writer: std.io.AnyWriter) !void {
+fn reportError(token: Token, err: Error, writer: std.io.AnyWriter) !void {
     try writer.print("[line {d}] Error", .{token.line});
     _ = switch (token.typ) {
         .Eof => try writer.write(" at end"),
         .Error => {},
         else => try writer.print(" at '{s}'", .{token.lexeme}),
     };
-    try writer.print(": {s}\n", .{msg});
+    switch (err) {
+        Error.Unexpected => try writer.print(": expected {s}\n", .{expected orelse "unknown token"}),
+        else => try writer.print(": {s}\n", .{@errorName(err)}),
+    }
 }
 
 pub fn printTokens(source: []const u8, writer: std.mem.AnyWriter) void {

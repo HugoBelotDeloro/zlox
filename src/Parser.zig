@@ -392,6 +392,51 @@ fn expressionStatement(self: *Parser) !void {
     try self.emitInstruction(.Pop);
 }
 
+fn forStatement(self: *Parser) !void {
+    self.beginScope();
+    try self.consume(.LeftParen, Error.ExpectOpenParen);
+    if (!try self.match(.Semicolon)) {
+        if (try self.match(.Var)) {
+            try self.varDeclaration();
+        } else {
+            try self.expressionStatement();
+        }
+    }
+
+    var loop_start = self.chunk.code.items.len;
+    const exit_jump: ?usize = blk: {
+        if (try self.match(.Semicolon)) break :blk null;
+        try self.expression();
+        try self.consume(.Semicolon, Error.MissingSemicolon);
+
+        const exit_jump = try self.emitJump(.JumpIfFalse);
+        try self.emitInstruction(.Pop);
+        break :blk exit_jump;
+    };
+
+    if (!try self.match(.RightParen)) {
+        const body_jump = try self.emitJump(.Jump);
+        const increment_start = self.chunk.code.items.len;
+        try self.expression();
+        try self.emitInstruction(.Pop);
+        try self.consume(.RightParen, Error.ExpectClosingParen);
+
+        try self.emitLoop(loop_start);
+        loop_start = increment_start;
+        try self.patchJump(body_jump);
+    }
+
+    try self.statement();
+    try self.emitLoop(loop_start);
+
+    if (exit_jump) |jmp| {
+        try self.patchJump(jmp);
+        try self.emitInstruction(.Pop);
+    }
+
+    try self.endScope();
+}
+
 fn ifStatement(self: *Parser) !void {
     try self.consume(.LeftParen, Error.ExpectOpenParen);
     try self.expression();
@@ -465,6 +510,8 @@ fn statement(self: *Parser) Error!void {
         return self.ifStatement();
     if (try self.match(.While))
         return self.whileStatement();
+    if (try self.match(.For))
+        return self.forStatement();
 
     if (try self.match(.LeftBrace)) {
         self.beginScope();

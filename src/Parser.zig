@@ -196,13 +196,22 @@ fn emitConstant(self: *Parser, constant: Value) !void {
     return self.chunk.writeConstant(constant, self.previous.line);
 }
 
+fn emitLoop(self: *Parser, loop_start: usize) !void {
+    try self.emitInstruction(.Loop);
+
+    const offset = self.chunk.code.items.len - loop_start + 2;
+    if (offset > std.math.maxInt(u16)) return self.errorAtCurrent(Error.JumpTooLong);
+
+    try self.emitInstructions(.{ @as(u8, @truncate(offset >> 8)), @as(u8, @truncate(offset)) });
+}
+
 fn emitJump(self: *Parser, instr: OpCode) !usize {
     try self.emitInstructions(.{ instr, 0xff, 0xff });
     return self.chunk.code.items.len - 2;
 }
 
 fn patchJump(self: *Parser, offset: usize) !void {
-    const jump: u16 = @intCast(self.chunk.code.items.len - offset - 2);
+    const jump = self.chunk.code.items.len - offset - 2;
 
     if (jump > std.math.maxInt(u16)) {
         return self.errorAtCurrent(Error.JumpTooLong);
@@ -407,6 +416,21 @@ fn printStatement(self: *Parser) !void {
     try self.emitInstruction(.Print);
 }
 
+fn whileStatement(self: *Parser) !void {
+    const loop_start = self.chunk.code.items.len;
+    try self.consume(.LeftParen, Error.ExpectOpenParen);
+    try self.expression();
+    try self.consume(.RightParen, Error.ExpectClosingParen);
+
+    const exit_jump = try self.emitJump(.JumpIfFalse);
+    try self.emitInstruction(.Pop);
+    try self.statement();
+    try self.emitLoop(loop_start);
+
+    try self.patchJump(exit_jump);
+    try self.emitInstruction(.Pop);
+}
+
 fn synchronize(self: *Parser) !void {
     if (try self.discardTokens()) {
         self.panic_mode = false;
@@ -435,11 +459,13 @@ fn declaration(self: *Parser) Error!void {
 }
 
 fn statement(self: *Parser) Error!void {
-    if (try self.match(.Print)) {
+    if (try self.match(.Print))
         return self.printStatement();
-    } else if (try self.match(.If)) {
+    if (try self.match(.If))
         return self.ifStatement();
-    }
+    if (try self.match(.While))
+        return self.whileStatement();
+
     if (try self.match(.LeftBrace)) {
         self.beginScope();
         try self.block();

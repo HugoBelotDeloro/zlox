@@ -71,6 +71,10 @@ fn run(self: *Vm, writer: std.io.AnyWriter) !InterpretResult {
                 const offset = self.readShort();
                 if (isFalsey(self.peek(0))) self.ip += offset;
             },
+            .Loop => {
+                const offset = self.readShort();
+                self.ip -= offset;
+            },
             .Return => {
                 return .Ok;
             },

@@ -27,6 +27,7 @@ pub fn disassembleInstruction(chunk: *const Chunk, offset: usize, writer: std.io
         .ConstantLong, .GetGlobalLong, .DefineGlobalLong, .SetGlobalLong => constantLongInstruction(instruction, offset, writer, chunk),
         .PopN, .GetLocal, .SetLocal => byteInstruction(instruction, offset, writer, chunk.code.items[offset + 1]),
         .Jump, .JumpIfFalse => jumpInstruction(instruction, 1, chunk, offset, writer),
+        .Loop => jumpInstruction(instruction, -1, chunk, offset, writer),
         _ => unknownOpcode(instruction, offset, writer),
     };
 }

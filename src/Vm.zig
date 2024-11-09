@@ -89,6 +89,7 @@ fn run(self: *Vm, writer: std.io.AnyWriter) !InterpretResult {
             .Nil => self.push(Value.nil()),
             .True => self.push(Value.boolean(true)),
             .False => self.push(Value.boolean(false)),
+            .Dup => self.push(self.peek(0)),
             .Pop => {
                 _ = self.pop();
             },

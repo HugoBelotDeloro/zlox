@@ -62,6 +62,7 @@ const ParseRule = struct {
         .RightParen = .{ .prefix = null, .infix = null, .precedence = .None },
         .LeftBrace = .{ .prefix = null, .infix = null, .precedence = .None },
         .RightBrace = .{ .prefix = null, .infix = null, .precedence = .None },
+        .Colon = .{ .prefix = null, .infix = null, .precedence = .None },
         .Comma = .{ .prefix = null, .infix = null, .precedence = .None },
         .Dot = .{ .prefix = null, .infix = null, .precedence = .None },
         .Minus = .{ .prefix = unary, .infix = binary, .precedence = .Term },
@@ -81,7 +82,9 @@ const ParseRule = struct {
         .String = .{ .prefix = string, .infix = null, .precedence = .None },
         .Number = .{ .prefix = number, .infix = null, .precedence = .None },
         .And = .{ .prefix = null, .infix = @"and", .precedence = .And },
+        .Case = .{ .prefix = null, .infix = null, .precedence = .None },
         .Class = .{ .prefix = null, .infix = null, .precedence = .None },
+        .Default = .{ .prefix = null, .infix = null, .precedence = .None },
         .Else = .{ .prefix = null, .infix = null, .precedence = .None },
         .False = .{ .prefix = @"false", .infix = null, .precedence = .None },
         .For = .{ .prefix = null, .infix = null, .precedence = .None },
@@ -92,6 +95,7 @@ const ParseRule = struct {
         .Print = .{ .prefix = null, .infix = null, .precedence = .None },
         .Return = .{ .prefix = null, .infix = null, .precedence = .None },
         .Super = .{ .prefix = null, .infix = null, .precedence = .None },
+        .Switch = .{ .prefix = null, .infix = null, .precedence = .None },
         .This = .{ .prefix = null, .infix = null, .precedence = .None },
         .True = .{ .prefix = @"true", .infix = null, .precedence = .None },
         .Var = .{ .prefix = null, .infix = null, .precedence = .None },
@@ -452,6 +456,58 @@ fn ifStatement(self: *Parser) !void {
     try self.patchJump(else_jump);
 }
 
+fn switchStatement(self: *Parser) !void {
+    try self.consume(.LeftParen);
+    try self.expression();
+    try self.consume(.RightParen);
+
+    try self.consume(.LeftBrace);
+
+    var jumps_to_end = std.ArrayList(usize).init(self.alloc);
+    var jump_from_previous: usize = 0;
+    var is_first = true;
+    var has_default = false;
+
+    while (try self.match(.Case)) {
+        if (!is_first) {
+            try self.patchJump(jump_from_previous);
+            try self.emitInstruction(.Pop);
+        }
+        is_first = false;
+
+        try self.emitInstruction(.Dup);
+        try self.expression();
+        try self.emitInstruction(.Equal);
+        jump_from_previous = try self.emitJump(.JumpIfFalse);
+
+        try self.emitInstruction(.Pop);
+        try self.consume(.Colon);
+        while (!self.check(.Case) and !self.check(.Default) and !self.check(.RightBrace)) {
+            try self.statement();
+        }
+        if (!self.check(.RightBrace))
+            try jumps_to_end.append(try self.emitJump(.Jump));
+    }
+
+    if (try self.match(.Default)) {
+        has_default = true;
+        if (!is_first) {
+            try self.patchJump(jump_from_previous);
+            try self.emitInstruction(.Pop);
+        }
+        try self.consume(.Colon);
+        while (!self.check(.RightBrace)) {
+            try self.statement();
+        }
+    }
+
+    if (!has_default) try self.patchJump(jump_from_previous);
+    for (jumps_to_end.items) |jump|
+        try self.patchJump(jump);
+    try self.emitInstruction(.Pop);
+    try self.consume(.RightBrace);
+}
+
 fn printStatement(self: *Parser) !void {
     try self.expression();
     try self.consume(.Semicolon);
@@ -483,7 +539,7 @@ fn discardTokens(self: *Parser) !bool {
     while (!self.check(.Eof)) {
         if (self.previous.typ == .Semicolon) return true;
         switch (self.current.typ) {
-            .Class, .Fun, .Var, .For, .If, .While, .Print, .Return => return true,
+            .Class, .Fun, .Var, .For, .If, .Switch, .While, .Print, .Return => return true,
             else => try self.advance(),
         }
     }
@@ -509,6 +565,8 @@ fn statement(self: *Parser) Error!void {
         return self.whileStatement();
     if (try self.match(.For))
         return self.forStatement();
+    if (try self.match(.Switch))
+        return self.switchStatement();
 
     if (try self.match(.LeftBrace)) {
         self.beginScope();
@@ -645,11 +703,11 @@ fn reportError(token: Token, err: Error, writer: std.io.AnyWriter) !void {
     }
 }
 
-pub fn printTokens(source: []const u8, writer: std.mem.AnyWriter) void {
+pub fn printTokens(source: []const u8, writer: std.io.AnyWriter) !void {
     var scanner = Scanner.init(source);
 
     var line: u32 = 0;
-    while (try scanner.next()) |token| {
+    while (scanner.next()) |token| {
         if (token.line != line) {
             try writer.print("{d: >4} ", .{token.line});
             line = token.line;
@@ -657,7 +715,7 @@ pub fn printTokens(source: []const u8, writer: std.mem.AnyWriter) void {
             _ = try writer.write("   | ");
         }
 
-        try writer.print("{s: <13} {s}\n", .{ @tagName(token.typ), token.start[0..token.length] });
+        try writer.print("{s: <13} {s}\n", .{ @tagName(token.typ), token.lexeme });
 
         if (token.typ == .Eof) {
             break;

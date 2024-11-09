@@ -15,6 +15,7 @@ pub const OpCode = enum(u8) {
     Nil,
     True,
     False,
+    Dup,
     Pop,
     PopN,
     GetLocal,

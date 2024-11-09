@@ -44,6 +44,7 @@ pub const TokenType = enum {
     And,
     Case,
     Class,
+    Continue,
     Default,
     Else,
     False,
@@ -230,6 +231,7 @@ fn identifierType(self: *Scanner) TokenType {
         'c' => if (len == 1) .Identifier else switch(word_rest[0]) {
             'a' => checkKeyword(word_rest[1..], "se", .Case),
             'l' => checkKeyword(word_rest[1..], "ass", .Class),
+            'o' => checkKeyword(word_rest[1..], "ntinue", .Continue),
             else => .Identifier,
         },
         'd' => checkKeyword(word_rest, "efault", .Default),

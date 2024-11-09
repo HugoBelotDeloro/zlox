@@ -16,10 +16,11 @@ const Error = error{
     AlreadyDeclared,
     ExpectEndOfExpression,
     ExpectExpression,
-    Unexpected,
     JumpTooLong,
     InvalidAssignmentTarget,
+    NotInLoop,
     TooManyLocalVariables,
+    Unexpected,
     VariableUsedInItsOwnInitialization,
 } || std.mem.Allocator.Error || std.fmt.ParseFloatError;
 
@@ -35,6 +36,7 @@ strings: *Table(u8),
 compiler: Compiler,
 had_error: bool = false,
 panic_mode: bool = false,
+continue_offsets: std.ArrayList(usize),
 
 alloc: std.mem.Allocator,
 
@@ -84,6 +86,7 @@ const ParseRule = struct {
         .And = .{ .prefix = null, .infix = @"and", .precedence = .And },
         .Case = .{ .prefix = null, .infix = null, .precedence = .None },
         .Class = .{ .prefix = null, .infix = null, .precedence = .None },
+        .Continue = .{ .prefix = null, .infix = null, .precedence = .None },
         .Default = .{ .prefix = null, .infix = null, .precedence = .None },
         .Else = .{ .prefix = null, .infix = null, .precedence = .None },
         .False = .{ .prefix = @"false", .infix = null, .precedence = .None },
@@ -121,19 +124,26 @@ fn init(source: []const u8, chunk: *Chunk, strings: *Table(u8), alloc: std.mem.A
         .scanner = Scanner.init(source),
         .chunk = chunk,
         .strings = strings,
-        .compiler = Compiler{
+        .compiler = Compiler {
             .locals = undefined,
             .localCount = 0,
             .scopeDepth = 0,
         },
         .previous = undefined,
         .current = undefined,
+        .continue_offsets = std.ArrayList(usize).init(alloc),
         .alloc = alloc,
     };
 }
 
+fn deinit(self: *Parser) void {
+    std.debug.assert(self.continue_offsets.items.len == 0);
+    self.continue_offsets.deinit();
+}
+
 pub fn compile(source: []const u8, chunk: *Chunk, strings: *Table(u8), alloc: std.mem.Allocator) !void {
     var self = Parser.init(source, chunk, strings, alloc);
+    defer self.deinit();
 
     try self.advance();
 
@@ -405,6 +415,9 @@ fn forStatement(self: *Parser) !void {
     }
 
     var loop_start = self.chunk.code.items.len;
+    try self.continue_offsets.append(loop_start);
+    defer _ = self.continue_offsets.pop();
+
     const exit_jump: ?usize = blk: {
         if (try self.match(.Semicolon)) break :blk null;
         try self.expression();
@@ -418,6 +431,7 @@ fn forStatement(self: *Parser) !void {
     if (!try self.match(.RightParen)) {
         const body_jump = try self.emitJump(.Jump);
         const increment_start = self.chunk.code.items.len;
+        self.continue_offsets.items[self.continue_offsets.items.len - 1] = increment_start;
         try self.expression();
         try self.emitInstruction(.Pop);
         try self.consume(.RightParen);
@@ -508,6 +522,12 @@ fn switchStatement(self: *Parser) !void {
     try self.consume(.RightBrace);
 }
 
+fn continueStatement(self: *Parser) !void {
+    if (self.continue_offsets.items.len == 0) return Error.NotInLoop;
+    try self.emitLoop(self.continue_offsets.getLast());
+    try self.consume(.Semicolon);
+}
+
 fn printStatement(self: *Parser) !void {
     try self.expression();
     try self.consume(.Semicolon);
@@ -516,6 +536,10 @@ fn printStatement(self: *Parser) !void {
 
 fn whileStatement(self: *Parser) !void {
     const loop_start = self.chunk.code.items.len;
+
+    try self.continue_offsets.append(loop_start);
+    defer _ = self.continue_offsets.pop();
+
     try self.consume(.LeftParen);
     try self.expression();
     try self.consume(.RightParen);
@@ -567,6 +591,8 @@ fn statement(self: *Parser) Error!void {
         return self.forStatement();
     if (try self.match(.Switch))
         return self.switchStatement();
+    if (try self.match(.Continue))
+        return self.continueStatement();
 
     if (try self.match(.LeftBrace)) {
         self.beginScope();

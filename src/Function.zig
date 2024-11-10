@@ -4,10 +4,11 @@ const Chunk = @import("Chunk.zig");
 
 const Function = @This();
 
+alloc: std.mem.Allocator,
 obj: Obj = Obj{ .typ = .Function },
 arity: usize,
 chunk: Chunk,
-name: *Obj.String,
+name: ?*Obj.String,
 
 pub fn getObj(self: *Function) *Obj {
     return &self.obj;
@@ -15,6 +16,7 @@ pub fn getObj(self: *Function) *Obj {
 
 pub fn init(alloc: std.mem.Allocator) Function {
     return Function{
+        .alloc = alloc,
         .arity = undefined,
         .chunk = Chunk.init(alloc),
         .name = undefined,
@@ -23,7 +25,14 @@ pub fn init(alloc: std.mem.Allocator) Function {
 }
 
 pub fn deinit(self: *Function) void {
-    self.chunk.free();
+    self.chunk.deinit();
+    self.alloc.destroy(self);
+}
+
+pub fn deinitReturnChunk(self: *Function) Chunk {
+    const chunk = self.chunk;
+    self.alloc.destroy(self);
+    return chunk;
 }
 
 pub fn eql(a: *Function, b: *Function) bool {
@@ -39,5 +48,7 @@ pub fn format(
     _ = fmt;
     _ = options;
 
-    try writer.print("<fn {s}>", .{self.name.getString()});
+    if (self.name) |name|
+        return writer.print("<fn {s}>", .{name.getString()});
+    _ = try writer.write("<script>");
 }

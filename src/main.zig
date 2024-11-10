@@ -57,29 +57,11 @@ fn runFile(path: []const u8, allocator: std.mem.Allocator) !Vm.InterpretResult {
 
 fn executeSource(source: []u8, allocator: std.mem.Allocator) !Vm.InterpretResult {
     const writer = std.io.getStdOut().writer().any();
-    var chunk = Chunk.init(allocator);
-    defer chunk.free();
     var strings = Table(u8).init(allocator);
     defer strings.deinit();
-    try Parser.compile(source, &chunk, &strings, allocator);
-    return Vm.interpret(&chunk, &strings, allocator, writer);
-}
-
-fn simpleProgram(allocator: std.mem.Allocator) !void {
-    var chunk = Chunk.init(allocator);
-    defer chunk.free();
-
-    try chunk.writeConstant(1.2, 0);
-    try chunk.writeConstant(3.4, 1);
-    try chunk.writeInstruction(.Add, 2);
-    try chunk.writeConstant(5.6, 3);
-    try chunk.writeInstruction(.Divide, 4);
-    try chunk.writeInstruction(.Return, 5);
-
-    var stdout = std.io.getStdOut().writer();
-
-    try debug.disassembleChunk(&chunk, "test chunk", stdout.any());
-
-    _ = try stdout.write("\n\n== interpret ==\n");
-    _ = try Vm.interpret(&chunk, allocator, stdout.any());
+    if (try Parser.compile(source, &strings, allocator)) |function| {
+        defer function.deinit();
+        return Vm.interpret(&function.chunk, &strings, allocator, writer);
+    }
+    return .CompileError;
 }

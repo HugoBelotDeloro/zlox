@@ -69,7 +69,7 @@ pub fn from_bytecode(bytecode: []u8, allocator: std.mem.Allocator) Chunk {
     };
 }
 
-pub fn free(self: *Chunk) void {
+pub fn deinit(self: *Chunk) void {
     self.code.deinit();
     self.constants.deinit();
     self.lines.deinit();
@@ -168,7 +168,7 @@ fn updateLines(self: *Chunk, line: u32, bytes_added_count: u32) !void {
 
 test "constants" {
     var chunk = Chunk.init(std.testing.allocator);
-    defer chunk.free();
+    defer chunk.deinit();
     const one = try chunk.addConstant(1);
     const two = try chunk.addConstant(2);
     const three = try chunk.addConstant(3);
@@ -180,7 +180,7 @@ test "constants" {
 
 test "long constants" {
     var chunk = Chunk.init(std.testing.allocator);
-    defer chunk.free();
+    defer chunk.deinit();
 
     var i: u32 = 0;
     while (i < 257) : (i += 1) {

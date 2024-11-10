@@ -31,7 +31,6 @@ var expected: ?[]const u8 = null;
 current: Token,
 previous: Token,
 scanner: Scanner,
-chunk: *Chunk,
 strings: *Table(u8),
 compiler: Compiler,
 had_error: bool = false,
@@ -115,19 +114,56 @@ const Local = struct {
     depth: ?u8,
 };
 
+const FunctionType = enum {
+    Function,
+    Script,
+};
+
 const Compiler = struct {
+    function: *Obj.Function,
+    typ: FunctionType,
+
     locals: [std.math.maxInt(u8) + 1]Local,
     localCount: u8,
     scopeDepth: u8,
+
+    pub fn init(typ: FunctionType, alloc: std.mem.Allocator) Compiler {
+        var compiler = Compiler {
+            .typ = typ,
+            .function = Obj.Function.init(alloc),
+            .locals = undefined,
+            .localCount = 0,
+            .scopeDepth = 0,
+        };
+
+        compiler.locals[compiler.localCount] = Local{
+            .depth = 0,
+            .name = Token{
+                .lexeme = "",
+                .typ = .Identifier,
+                .line = 0,
+            }
+        };
+        compiler.localCount += 1;
+
+        return compiler;
+    }
+
+    pub fn deinit(self: *Compiler) *Obj.Function {
+        return self.function;
+    }
 };
 
-fn init(source: []const u8, chunk: *Chunk, strings: *Table(u8), alloc: std.mem.Allocator) Parser {
+fn init(source: []const u8, strings: *Table(u8), alloc: std.mem.Allocator) !Parser {
+    const main_function = try alloc.create(Obj.Function);
+    main_function.* = Obj.Function.init(alloc);
     return Parser{
         .scanner = Scanner.init(source),
-        .chunk = chunk,
         .strings = strings,
         .compiler = Compiler{
             .locals = undefined,
+            .function = main_function,
+            .typ = undefined,
             .localCount = 0,
             .scopeDepth = 0,
         },
@@ -139,16 +175,17 @@ fn init(source: []const u8, chunk: *Chunk, strings: *Table(u8), alloc: std.mem.A
     };
 }
 
-fn deinit(self: *Parser) void {
+fn deinit(self: *Parser) *Obj.Function {
     std.debug.assert(self.continue_offsets.items.len == 0);
     std.debug.assert(self.break_jumps.items.len == 0);
     self.continue_offsets.deinit();
     self.break_jumps.deinit();
+    const function = self.compiler.deinit();
+    return function;
 }
 
-pub fn compile(source: []const u8, chunk: *Chunk, strings: *Table(u8), alloc: std.mem.Allocator) !void {
-    var self = Parser.init(source, chunk, strings, alloc);
-    defer self.deinit();
+pub fn compile(source: []const u8, strings: *Table(u8), alloc: std.mem.Allocator) !?*Obj.Function {
+    var self = try Parser.init(source, strings, alloc);
 
     try self.advance();
 
@@ -156,12 +193,8 @@ pub fn compile(source: []const u8, chunk: *Chunk, strings: *Table(u8), alloc: st
         self.declaration() catch |err| try reportError(error_token.?, err, std.io.getStdErr().writer().any());
     }
     try self.consume(.Eof);
-    try self.endCompiler();
-
-    if (self.had_error)
-        return error.ParsingError;
-    if (DebugPrintChunk)
-        try @import("debug.zig").disassembleChunk(self.chunk, "compilation result", std.io.getStdErr().writer().any());
+    const function = try self.endCompiler();
+    return if (self.had_error) null else function;
 }
 
 fn advance(self: *Parser) Error!void {
@@ -195,7 +228,7 @@ fn match(self: *Parser, typ: TokenType) !bool {
 }
 
 fn emitInstruction(self: *Parser, instr: OpCode) !void {
-    return self.chunk.writeInstruction(instr, self.previous.line);
+    return self.currentChunk().writeInstruction(instr, self.previous.line);
 }
 
 fn emitInstructions(self: *Parser, instructions: anytype) !void {
@@ -209,13 +242,13 @@ fn emitInstructions(self: *Parser, instructions: anytype) !void {
 }
 
 fn emitConstant(self: *Parser, constant: Value) !void {
-    return self.chunk.writeConstant(constant, self.previous.line);
+    return self.currentChunk().writeConstant(constant, self.previous.line);
 }
 
 fn emitLoop(self: *Parser, loop_start: usize) !void {
     try self.emitInstruction(.Loop);
 
-    const offset = self.chunk.code.items.len - loop_start + 2;
+    const offset = self.currentChunk().code.items.len - loop_start + 2;
     if (offset > std.math.maxInt(u16)) return self.errorAtCurrent(Error.JumpTooLong);
 
     try self.emitInstructions(.{ @as(u8, @truncate(offset >> 8)), @as(u8, @truncate(offset)) });
@@ -223,18 +256,18 @@ fn emitLoop(self: *Parser, loop_start: usize) !void {
 
 fn emitJump(self: *Parser, instr: OpCode) !usize {
     try self.emitInstructions(.{ instr, 0xff, 0xff });
-    return self.chunk.code.items.len - 2;
+    return self.currentChunk().code.items.len - 2;
 }
 
 fn patchJump(self: *Parser, offset: usize) !void {
-    const jump = self.chunk.code.items.len - offset - 2;
+    const jump = self.currentChunk().code.items.len - offset - 2;
 
     if (jump > std.math.maxInt(u16)) {
         return self.errorAtCurrent(Error.JumpTooLong);
     }
 
-    self.chunk.code.items[offset] = @truncate(jump >> 8);
-    self.chunk.code.items[offset + 1] = @truncate(jump);
+    self.currentChunk().code.items[offset] = @truncate(jump >> 8);
+    self.currentChunk().code.items[offset + 1] = @truncate(jump);
 }
 
 fn errorAtCurrent(self: *Parser, err: Error) Error {
@@ -250,8 +283,16 @@ fn errorAt(self: *Parser, token: *Token, err: Error) Error {
     return err;
 }
 
-fn endCompiler(self: *Parser) !void {
-    return self.emitInstruction(.Return);
+fn endCompiler(self: *Parser) !*Obj.Function {
+    try self.emitInstruction(.Return);
+
+    if (self.had_error)
+        return error.ParsingError;
+    if (DebugPrintChunk)
+        try @import("debug.zig").disassembleChunk(self.currentChunk(), if
+(self.compiler.function.name) |name| name else "<script>", std.io.getStdErr().writer().any());
+
+    return self.deinit();
 }
 
 fn beginScope(self: *Parser) void {
@@ -271,7 +312,7 @@ fn endScope(self: *Parser) !void {
 }
 
 fn beginLoop(self: *Parser) !usize {
-    const loop_start = self.chunk.code.items.len;
+    const loop_start = self.currentChunk().code.items.len;
     try self.continue_offsets.append(loop_start);
     try self.break_jumps.append(std.ArrayList(usize).init(self.alloc));
     return loop_start;
@@ -312,7 +353,7 @@ fn string(self: *Parser, can_assign: bool) Error!void {
     const str = self.previous.lexeme[1 .. self.previous.lexeme.len - 1];
     const str_obj = try self.tryIntern(str);
     const obj = Value.obj(str_obj.getObj());
-    try self.chunk.writeConstant(obj, self.previous.line);
+    try self.currentChunk().writeConstant(obj, self.previous.line);
 }
 
 fn variable(self: *Parser, can_assign: bool) Error!void {
@@ -331,10 +372,10 @@ fn namedVariable(self: *Parser, can_assign: bool) Error!void {
     if (can_assign and try self.match(.Equal)) {
         try self.expression();
         try self.emitInstruction(set_op);
-        try self.chunk.writeConstantId(arg2, self.previous.line);
+        try self.currentChunk().writeConstantId(arg2, self.previous.line);
     } else {
         try self.emitInstruction(get_op);
-        try self.chunk.writeConstantId(arg2, self.previous.line);
+        try self.currentChunk().writeConstantId(arg2, self.previous.line);
     }
 }
 
@@ -449,7 +490,7 @@ fn forStatement(self: *Parser) !void {
 
     if (!try self.match(.RightParen)) {
         const body_jump = try self.emitJump(.Jump);
-        const increment_start = self.chunk.code.items.len;
+        const increment_start = self.currentChunk().code.items.len;
         self.continue_offsets.items[self.continue_offsets.items.len - 1] = increment_start;
         try self.expression();
         try self.emitInstruction(.Pop);
@@ -655,7 +696,7 @@ fn parsePrecedence(self: *Parser, precedence: Precedence) Error!void {
 fn identifierConstant(self: *Parser, token: *Token) !usize {
     const obj = try self.tryIntern(token.lexeme);
     const val = Value.any(obj);
-    return self.chunk.addConstant(val);
+    return self.currentChunk().addConstant(val);
 }
 
 fn resolveLocal(self: *Parser, name: *Token) !?u8 {
@@ -727,7 +768,7 @@ fn defineVariable(self: *Parser, global_id: usize) !void {
         self.markInitialized();
         return;
     }
-    return self.chunk.writeGlobal(global_id, self.previous.line);
+    return self.currentChunk().writeGlobal(global_id, self.previous.line);
 }
 
 fn @"and"(self: *Parser, can_assign: bool) !void {
@@ -776,4 +817,8 @@ pub fn printTokens(source: []const u8, writer: std.io.AnyWriter) !void {
             break;
         }
     }
+}
+
+fn currentChunk(self: *Parser) *Chunk {
+    return &self.compiler.function.chunk;
 }

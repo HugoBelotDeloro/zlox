@@ -22,8 +22,7 @@ pub fn disassembleInstruction(chunk: *const Chunk, offset: usize, writer: std.io
 
     const instruction: OpCode = @enumFromInt(chunk.code.items[offset]);
     return switch (instruction) {
-        .Print, .Return, .Equal, .Greater, .Less, .Add, .Subtract, .Multiply, .Divide, .Not, .Negate, .True, .False,
-.Dup, .Pop, .Nil => simpleInstruction(instruction, offset, writer),
+        .Print, .Return, .Equal, .Greater, .Less, .Add, .Subtract, .Multiply, .Divide, .Not, .Negate, .True, .False, .Dup, .Pop, .Nil => simpleInstruction(instruction, offset, writer),
         .Constant, .GetGlobal, .DefineGlobal, .SetGlobal => constantInstruction(instruction, offset, writer, chunk),
         .ConstantLong, .GetGlobalLong, .DefineGlobalLong, .SetGlobalLong => constantLongInstruction(instruction, offset, writer, chunk),
         .PopN, .GetLocal, .SetLocal => byteInstruction(instruction, offset, writer, chunk.code.items[offset + 1]),

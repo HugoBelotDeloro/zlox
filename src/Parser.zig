@@ -126,7 +126,7 @@ fn init(source: []const u8, chunk: *Chunk, strings: *Table(u8), alloc: std.mem.A
         .scanner = Scanner.init(source),
         .chunk = chunk,
         .strings = strings,
-        .compiler = Compiler {
+        .compiler = Compiler{
             .locals = undefined,
             .localCount = 0,
             .scopeDepth = 0,

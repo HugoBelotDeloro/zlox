@@ -127,10 +127,12 @@ const Compiler = struct {
     localCount: u8,
     scopeDepth: u8,
 
-    pub fn init(typ: FunctionType, alloc: std.mem.Allocator) Compiler {
+    pub fn init(typ: FunctionType, alloc: std.mem.Allocator) !Compiler {
+    const main_function = try alloc.create(Obj.Function);
+    main_function.* = Obj.Function.init(alloc);
         var compiler = Compiler {
             .typ = typ,
-            .function = Obj.Function.init(alloc),
+            .function = main_function,
             .locals = undefined,
             .localCount = 0,
             .scopeDepth = 0,
@@ -155,18 +157,10 @@ const Compiler = struct {
 };
 
 fn init(source: []const u8, strings: *Table(u8), alloc: std.mem.Allocator) !Parser {
-    const main_function = try alloc.create(Obj.Function);
-    main_function.* = Obj.Function.init(alloc);
     return Parser{
         .scanner = Scanner.init(source),
         .strings = strings,
-        .compiler = Compiler{
-            .locals = undefined,
-            .function = main_function,
-            .typ = undefined,
-            .localCount = 0,
-            .scopeDepth = 0,
-        },
+        .compiler = try Compiler.init(.Script, alloc),
         .previous = undefined,
         .current = undefined,
         .continue_offsets = std.ArrayList(usize).init(alloc),
@@ -289,8 +283,7 @@ fn endCompiler(self: *Parser) !*Obj.Function {
     if (self.had_error)
         return error.ParsingError;
     if (DebugPrintChunk)
-        try @import("debug.zig").disassembleChunk(self.currentChunk(), if
-(self.compiler.function.name) |name| name else "<script>", std.io.getStdErr().writer().any());
+        try @import("debug.zig").disassembleFunction(self.compiler.function, std.io.getStdErr().writer().any());
 
     return self.deinit();
 }

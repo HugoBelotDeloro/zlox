@@ -19,7 +19,7 @@ pub fn init(alloc: std.mem.Allocator) Function {
         .alloc = alloc,
         .arity = undefined,
         .chunk = Chunk.init(alloc),
-        .name = undefined,
+        .name = null,
         .obj = .{ .typ = .Function },
     };
 }

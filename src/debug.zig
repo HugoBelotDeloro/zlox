@@ -1,14 +1,15 @@
 const std = @import("std");
 const Chunk = @import("Chunk.zig");
+const Obj = @import("Obj.zig");
 const OpCode = Chunk.OpCode;
 const values = @import("value.zig");
 
-pub fn disassembleChunk(chunk: *const Chunk, name: []const u8, writer: std.io.AnyWriter) !void {
-    try writer.print("== {s} ==\n", .{name});
+pub fn disassembleFunction(function: *Obj.Function, writer: std.io.AnyWriter) !void {
+    try writer.print("== {s} ==\n", .{function});
 
     var i: usize = 0;
-    while (i < chunk.code.items.len) {
-        i = try disassembleInstruction(chunk, i, writer);
+    while (i < function.chunk.code.items.len) {
+        i = try disassembleInstruction(&function.chunk, i, writer);
     }
 }
 
@@ -67,24 +68,4 @@ fn jumpInstruction(instr: OpCode, sign: i32, chunk: *const Chunk, offset: usize,
     const jump: u16 = (@as(u16, chunk.code.items[offset + 1]) << 8) | (chunk.code.items[offset + 2]);
     try writer.print("{s: <16} {d: >4} -> {d}\n", .{ @tagName(instr), offset, @as(i32, @intCast(offset)) + 3 + sign * jump });
     return offset + 3;
-}
-
-test "disassembling" {
-    const alloc = std.testing.allocator;
-    var chunk = Chunk.init(alloc);
-    defer chunk.free();
-
-    try chunk.writeInstruction(OpCode.Return, 1);
-    try chunk.writeInstruction(OpCode.Return, 2);
-
-    var out = std.ArrayList(u8).init(alloc);
-    defer out.deinit();
-    try disassembleChunk(&chunk, "test chunk", out.writer().any());
-
-    try std.testing.expect(std.mem.eql(u8, out.items,
-        \\== test chunk ==
-        \\0000    1 Return
-        \\0001    2 Return
-        \\
-    ));
 }

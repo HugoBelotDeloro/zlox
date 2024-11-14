@@ -59,9 +59,10 @@ fn executeSource(source: []u8, allocator: std.mem.Allocator) !Vm.InterpretResult
     const writer = std.io.getStdOut().writer().any();
     var strings = Table(u8).init(allocator);
     defer strings.deinit();
+
     if (try Parser.compile(source, &strings, allocator)) |function| {
         defer function.deinit();
-        return Vm.interpret(&function.chunk, &strings, allocator, writer);
+        return Vm.interpret(function, &strings, allocator, writer);
     }
     return .CompileError;
 }

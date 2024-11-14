@@ -29,9 +29,10 @@ fn errorString(err: anyerror) ?[]const u8 {
     };
 }
 
-/// Not owned by Vm
-chunk: *const Chunk,
-ip: [*]u8,
+const FramesMax: usize = 64;
+
+frames: [FramesMax]CallFrame,
+frameCount: u8,
 stack: []Value,
 stack_top: [*]Value,
 /// Value is not used but must be non-zero to distinguish tombstones from empty cells.
@@ -40,13 +41,19 @@ globals: Table(Value),
 
 allocator: std.mem.Allocator,
 
-pub fn interpret(chunk: *const Chunk, strings: *Table(u8), allocator: std.mem.Allocator, writer: std.io.AnyWriter) !InterpretResult {
-    var vm = try Vm.init(allocator, chunk, strings);
+const CallFrame = struct {
+    function: *Obj.Function,
+    ip: [*]u8,
+    slots: []Value,
+};
+
+pub fn interpret(function: *Obj.Function, strings: *Table(u8), allocator: std.mem.Allocator, writer: std.io.AnyWriter) !InterpretResult {
+    var vm = try Vm.init(allocator, function, strings);
     defer vm.deinit();
 
     return vm.run(writer) catch |err| {
         if (errorString(err)) |msg| {
-            _ = try writer.print("[line {d} in script] {s}\n", .{ vm.chunk.getLine(vm.instructionIndex()), msg });
+            _ = try writer.print("[line {d} in script] {s}\n", .{ vm.currentFrame().function.chunk.getLine(vm.instructionIndex()), msg });
         }
         vm.resetStack();
         return error.RuntimeError;
@@ -54,26 +61,30 @@ pub fn interpret(chunk: *const Chunk, strings: *Table(u8), allocator: std.mem.Al
 }
 
 fn run(self: *Vm, writer: std.io.AnyWriter) !InterpretResult {
+    var frame = &self.frames[self.frameCount - 1];
+
     while (true) {
         if (DebugTraceExecution) {
             const stderr = std.io.getStdErr().writer().any();
             try self.printStack(stderr);
-            _ = try @import("debug.zig").disassembleInstruction(self.chunk, self.ip - self.chunk.code.items.ptr, stderr);
+            const chunk = &frame.function.chunk;
+            _ = try @import("debug.zig")
+            .disassembleInstruction(chunk, frame.ip - chunk.code.items.ptr, stderr);
         }
 
         try switch (self.readInstruction()) {
             .Print => try writer.print("{}\n", .{self.pop()}),
             .Jump => {
                 const offset = self.readShort();
-                self.ip += offset;
+                frame.ip += offset;
             },
             .JumpIfFalse => {
                 const offset = self.readShort();
-                if (isFalsey(self.peek(0))) self.ip += offset;
+                if (isFalsey(self.peek(0))) frame.ip += offset;
             },
             .Loop => {
                 const offset = self.readShort();
-                self.ip -= offset;
+                frame.ip -= offset;
             },
             .Return => {
                 return .Ok;
@@ -94,19 +105,19 @@ fn run(self: *Vm, writer: std.io.AnyWriter) !InterpretResult {
                 _ = self.pop();
             },
             .PopN => {
-                const n = self.ip[0];
-                self.ip += 1;
+                const n = self.currentFrame().ip[0];
+                frame.ip += 1;
                 self.popN(n);
             },
             .GetLocal => {
-                const slot = self.ip[0];
-                self.ip += 1;
-                try self.push(self.stack[slot]);
+                const slot = frame.ip[0];
+                frame.ip += 1;
+                try self.push(frame.slots[slot]);
             },
             .SetLocal => {
-                const slot = self.ip[0];
-                self.ip += 1;
-                self.stack[slot] = self.peek(0);
+                const slot = frame.ip[0];
+                frame.ip += 1;
+                frame.slots[slot] = self.peek(0);
             },
             .GetGlobal => {
                 const name = try self.readString();
@@ -179,17 +190,29 @@ fn run(self: *Vm, writer: std.io.AnyWriter) !InterpretResult {
     unreachable;
 }
 
-fn init(allocator: std.mem.Allocator, chunk: *const Chunk, strings: *Table(u8)) !Vm {
+fn init(allocator: std.mem.Allocator, function: *Obj.Function, strings: *Table(u8)) !Vm {
     const stack = try allocator.alloc(Value, StackBaseSize);
-    return Vm{
-        .chunk = chunk,
-        .ip = chunk.code.items.ptr,
+
+    var self = Vm{
+        .frames = .{undefined} ** FramesMax,
+        .frameCount = 0,
         .stack = stack,
         .stack_top = stack.ptr,
         .allocator = allocator,
         .strings = strings,
         .globals = Table(Value).init(allocator),
     };
+
+    try self.push(Value.any(function));
+
+    self.frames[0] = CallFrame{
+        .function = function,
+        .ip = function.chunk.code.items.ptr,
+        .slots = self.stack,
+    };
+    self.frameCount += 1;
+
+    return self;
 }
 
 fn deinit(self: *Vm) void {
@@ -224,20 +247,20 @@ fn popN(self: *Vm, n: usize) void {
 }
 
 fn readInstruction(self: *Vm) OpCode {
-    const instr = self.ip[0];
-    self.ip += 1;
+    const instr = self.currentFrame().ip[0];
+    self.currentFrame().ip += 1;
     return @enumFromInt(instr);
 }
 
 fn readConstant(self: *Vm) Value {
-    const id = self.ip[0];
-    self.ip += 1;
-    return self.chunk.constants.items[id];
+    const id = self.currentFrame().ip[0];
+    self.currentFrame().ip += 1;
+    return self.currentFrame().function.chunk.constants.items[id];
 }
 
 fn readShort(self: *Vm) u16 {
-    const val: u16 = @as(u16, self.ip[0]) << 8 | self.ip[1];
-    self.ip += 2;
+    const val: u16 = @as(u16, self.currentFrame().ip[0]) << 8 | self.currentFrame().ip[1];
+    self.currentFrame().ip += 2;
     return val;
 }
 
@@ -247,9 +270,9 @@ fn readString(self: *Vm) !*Obj.String {
 }
 
 fn readConstantLong(self: *Vm) Value {
-    const id = std.mem.bytesAsValue(u24, self.ip).*;
-    self.ip += 3;
-    return self.chunk.constants.items[id];
+    const id = std.mem.bytesAsValue(u24, self.currentFrame().ip).*;
+    self.currentFrame().ip += 3;
+    return self.currentFrame().function.chunk.constants.items[id];
 }
 
 fn readStringLong(self: *Vm) !*Obj.String {
@@ -283,7 +306,7 @@ fn stackIndex(self: *Vm) usize {
 }
 
 fn instructionIndex(self: *Vm) usize {
-    return self.ip - self.chunk.code.items.ptr;
+    return self.currentFrame().ip - self.currentFrame().function.chunk.code.items.ptr;
 }
 
 fn resetStack(self: *Vm) void {
@@ -375,4 +398,8 @@ fn pushString(self: *Vm, str: *Obj.String) !void {
     }
     _ = try self.strings.set(str, 0);
     try self.push(Value.any(str));
+}
+
+fn currentFrame(self: *Vm) *CallFrame {
+    return &self.frames[self.frameCount - 1];
 }

@@ -35,7 +35,7 @@ pub const Value = union(enum) {
             inline bool => Value.boolean(val),
             inline void => Value.nil(),
             inline *Obj => Value.obj(val),
-            inline *Obj.String => Value.obj(val.getObj()),
+            inline *Obj.String, *Obj.Function => Value.obj(val.getObj()),
             else => @compileError("Invalid type for value"),
         };
     }

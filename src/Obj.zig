@@ -39,9 +39,11 @@ pub fn format(
     _ = options;
 
     inline for (comptime std.enums.values(ObjType)) |obj_typ| {
-        const typ = ObjTypeOf(obj_typ);
-        const o = @as(*typ, @alignCast(@fieldParentPtr("obj", obj)));
-        try writer.print("{}", .{o});
+        if (obj.typ == obj_typ) {
+            const typ = ObjTypeOf(obj_typ);
+            const o = @as(*typ, @alignCast(@fieldParentPtr("obj", obj)));
+            try writer.print("{}", .{o});
+        }
     }
 }
 

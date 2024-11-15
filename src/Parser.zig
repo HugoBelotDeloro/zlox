@@ -32,7 +32,7 @@ current: Token,
 previous: Token,
 scanner: Scanner,
 strings: *Table(u8),
-compiler: Compiler,
+compiler: *Compiler,
 had_error: bool = false,
 panic_mode: bool = false,
 continue_offsets: std.ArrayList(usize),
@@ -120,6 +120,7 @@ const FunctionType = enum {
 };
 
 const Compiler = struct {
+    enclosing: ?*Compiler,
     function: *Obj.Function,
     typ: FunctionType,
 
@@ -127,10 +128,11 @@ const Compiler = struct {
     localCount: u8,
     scopeDepth: u8,
 
-    pub fn init(typ: FunctionType, alloc: std.mem.Allocator) !Compiler {
-    const main_function = try alloc.create(Obj.Function);
-    main_function.* = Obj.Function.init(alloc);
+    pub fn init(typ: FunctionType, parent: ?*Compiler, alloc: std.mem.Allocator) !Compiler {
+        const main_function = try alloc.create(Obj.Function);
+        main_function.* = Obj.Function.init(alloc);
         var compiler = Compiler {
+            .enclosing = parent,
             .typ = typ,
             .function = main_function,
             .locals = undefined,
@@ -151,7 +153,9 @@ const Compiler = struct {
         return compiler;
     }
 
-    pub fn deinit(self: *Compiler) *Obj.Function {
+    pub fn deinit(self: *Compiler, parser: *Parser) *Obj.Function {
+        if (self.enclosing) |enclosing|
+            parser.compiler = enclosing;
         return self.function;
     }
 };
@@ -174,8 +178,8 @@ fn deinit(self: *Parser) *Obj.Function {
     std.debug.assert(self.break_jumps.items.len == 0);
     self.continue_offsets.deinit();
     self.break_jumps.deinit();
-    const function = self.compiler.deinit();
-    return function;
+    const fun = self.compiler.deinit();
+    return fun;
 }
 
 pub fn compile(source: []const u8, strings: *Table(u8), alloc: std.mem.Allocator) !?*Obj.Function {
@@ -187,8 +191,8 @@ pub fn compile(source: []const u8, strings: *Table(u8), alloc: std.mem.Allocator
         self.declaration() catch |err| try reportError(error_token.?, err, std.io.getStdErr().writer().any());
     }
     try self.consume(.Eof);
-    const function = try self.endCompiler();
-    return if (self.had_error) null else function;
+    const fun = try self.endCompiler();
+    return if (self.had_error) null else fun;
 }
 
 fn advance(self: *Parser) Error!void {
@@ -439,6 +443,29 @@ fn block(self: *Parser) !void {
     try self.consume(.RightBrace);
 }
 
+fn function(self: *Parser, typ: FunctionType) void {
+    var compiler = try Compiler.init(typ, self.alloc);
+    self.beginScope();
+
+    try self.consume(.LeftParen);
+    try self.consume(.RightParen);
+    try self.consume(.LeftBrace);
+    try self.block();
+
+    const fun = try self.endCompiler();
+    try self.emitInstruction(.Constant);
+    try self.emitConstant(fun.getObj());
+
+    compiler.deinit(self);
+}
+
+fn funDeclaration(self: *Parser) !void {
+    const global = try self.parseVariable();
+    self.markInitialized();
+    try self.function(.Function);
+    try self.defineVariable(global);
+}
+
 fn varDeclaration(self: *Parser) !void {
     const global_id = try self.parseVariable();
 
@@ -632,7 +659,9 @@ fn discardTokens(self: *Parser) !bool {
 }
 
 fn declaration(self: *Parser) Error!void {
-    if (try self.match(.Var)) {
+    if (try self.match(.Fun)) {
+        try self.funDeclaration();
+    } else if (try self.match(.Var)) {
         try self.varDeclaration();
     } else {
         try self.statement();
@@ -753,6 +782,7 @@ fn parseVariable(self: *Parser) !usize {
 }
 
 fn markInitialized(self: *Parser) void {
+    if (self.compiler.scopeDepth == 0) return;
     self.compiler.locals[self.compiler.localCount - 1].depth = self.compiler.scopeDepth;
 }
 

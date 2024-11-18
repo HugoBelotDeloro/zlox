@@ -22,7 +22,10 @@ const Error = error{
     TooManyLocalVariables,
     Unexpected,
     VariableUsedInItsOwnInitialization,
-} || std.mem.Allocator.Error || std.fmt.ParseFloatError;
+
+    /// Generic error
+    ParsingError,
+} || std.mem.Allocator.Error || std.fmt.ParseFloatError || std.io.AnyWriter.Error;
 
 var error_token: ?Token = null;
 
@@ -128,19 +131,21 @@ const Compiler = struct {
     localCount: u8,
     scopeDepth: u8,
 
-    pub fn init(typ: FunctionType, parent: ?*Compiler, alloc: std.mem.Allocator) !Compiler {
+    pub fn init(self: *Compiler, typ: FunctionType, parser: *Parser, is_root: bool, alloc: std.mem.Allocator) !void{
         const main_function = try alloc.create(Obj.Function);
         main_function.* = Obj.Function.init(alloc);
-        var compiler = Compiler {
-            .enclosing = parent,
+
+        self.* = Compiler {
+            .enclosing = if (!is_root) parser.compiler else null,
             .typ = typ,
             .function = main_function,
             .locals = undefined,
             .localCount = 0,
             .scopeDepth = 0,
         };
+        parser.compiler = self;
 
-        compiler.locals[compiler.localCount] = Local{
+        self.locals[self.localCount] = Local{
             .depth = 0,
             .name = Token{
                 .lexeme = "",
@@ -148,29 +153,33 @@ const Compiler = struct {
                 .line = 0,
             }
         };
-        compiler.localCount += 1;
-
-        return compiler;
+        self.localCount += 1;
     }
 
     pub fn deinit(self: *Compiler, parser: *Parser) *Obj.Function {
         if (self.enclosing) |enclosing|
             parser.compiler = enclosing;
-        return self.function;
+        const fun = self.function;
+        parser.alloc.destroy(self);
+        return fun;
     }
 };
 
 fn init(source: []const u8, strings: *Table(u8), alloc: std.mem.Allocator) !Parser {
-    return Parser{
+    const compiler = try alloc.create(Compiler);
+    var self = Parser{
         .scanner = Scanner.init(source),
         .strings = strings,
-        .compiler = try Compiler.init(.Script, alloc),
+        .compiler = compiler,
         .previous = undefined,
         .current = undefined,
         .continue_offsets = std.ArrayList(usize).init(alloc),
         .break_jumps = std.ArrayList(std.ArrayList(usize)).init(alloc),
         .alloc = alloc,
     };
+    try self.compiler.init(.Script, &self, true, alloc);
+
+    return self;
 }
 
 fn deinit(self: *Parser) *Obj.Function {
@@ -178,7 +187,7 @@ fn deinit(self: *Parser) *Obj.Function {
     std.debug.assert(self.break_jumps.items.len == 0);
     self.continue_offsets.deinit();
     self.break_jumps.deinit();
-    const fun = self.compiler.deinit();
+    const fun = self.compiler.deinit(self);
     return fun;
 }
 
@@ -281,11 +290,11 @@ fn errorAt(self: *Parser, token: *Token, err: Error) Error {
     return err;
 }
 
-fn endCompiler(self: *Parser) !*Obj.Function {
+fn endCompiler(self: *Parser) Error!*Obj.Function {
     try self.emitInstruction(.Return);
 
     if (self.had_error)
-        return error.ParsingError;
+        return Error.ParsingError;
     if (DebugPrintChunk)
         try @import("debug.zig").disassembleFunction(self.compiler.function, std.io.getStdErr().writer().any());
 
@@ -443,20 +452,24 @@ fn block(self: *Parser) !void {
     try self.consume(.RightBrace);
 }
 
-fn function(self: *Parser, typ: FunctionType) void {
-    var compiler = try Compiler.init(typ, self.alloc);
+fn function(self: *Parser, typ: FunctionType) Error!void {
+    var compiler: Compiler = undefined;
+    try compiler.init(typ, self, false, self.alloc);
     self.beginScope();
 
     try self.consume(.LeftParen);
+    while (!self.check(.RightParen)) {
+        if (!try self.match(.Comma)) break;
+    }
     try self.consume(.RightParen);
     try self.consume(.LeftBrace);
     try self.block();
 
     const fun = try self.endCompiler();
     try self.emitInstruction(.Constant);
-    try self.emitConstant(fun.getObj());
+    try self.emitConstant(Value.any(fun.getObj()));
 
-    compiler.deinit(self);
+    _ = compiler.deinit(self);
 }
 
 fn funDeclaration(self: *Parser) !void {

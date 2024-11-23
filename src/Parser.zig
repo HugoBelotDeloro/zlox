@@ -20,6 +20,7 @@ const Error = error{
     InvalidAssignmentTarget,
     NotInLoop,
     TooManyLocalVariables,
+    TooManyParameters,
     Unexpected,
     VariableUsedInItsOwnInitialization,
 
@@ -144,6 +145,9 @@ const Compiler = struct {
             .scopeDepth = 0,
         };
         parser.compiler = self;
+        if (typ != .Script) {
+            self.function.name = try Obj.String.fromCopy(parser.previous.lexeme, alloc);
+        }
 
         self.locals[self.localCount] = Local{
             .depth = 0,
@@ -157,10 +161,12 @@ const Compiler = struct {
     }
 
     pub fn deinit(self: *Compiler, parser: *Parser) *Obj.Function {
-        if (self.enclosing) |enclosing|
-            parser.compiler = enclosing;
         const fun = self.function;
-        parser.alloc.destroy(self);
+        if (self.enclosing) |enclosing| {
+            parser.compiler = enclosing;
+        } else {
+            parser.alloc.destroy(self);
+        }
         return fun;
     }
 };
@@ -298,7 +304,7 @@ fn endCompiler(self: *Parser) Error!*Obj.Function {
     if (DebugPrintChunk)
         try @import("debug.zig").disassembleFunction(self.compiler.function, std.io.getStdErr().writer().any());
 
-    return self.deinit();
+    return self.compiler.deinit(self);
 }
 
 fn beginScope(self: *Parser) void {
@@ -455,21 +461,24 @@ fn block(self: *Parser) !void {
 fn function(self: *Parser, typ: FunctionType) Error!void {
     var compiler: Compiler = undefined;
     try compiler.init(typ, self, false, self.alloc);
+
+    // No matching closeScope because the compiler will be deinit'ed anyways
     self.beginScope();
 
     try self.consume(.LeftParen);
     while (!self.check(.RightParen)) {
-        if (!try self.match(.Comma)) break;
+        if (compiler.function.arity == 255)
+            return self.errorAtCurrent(Error.TooManyParameters);
+        compiler.function.arity += 1;
+        const constant = try self.parseVariable();
+        try self.defineVariable(constant);
     }
     try self.consume(.RightParen);
     try self.consume(.LeftBrace);
     try self.block();
 
     const fun = try self.endCompiler();
-    try self.emitInstruction(.Constant);
     try self.emitConstant(Value.any(fun.getObj()));
-
-    _ = compiler.deinit(self);
 }
 
 fn funDeclaration(self: *Parser) !void {

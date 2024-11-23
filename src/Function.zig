@@ -6,7 +6,7 @@ const Function = @This();
 
 alloc: std.mem.Allocator,
 obj: Obj = Obj{ .typ = .Function },
-arity: usize,
+arity: u8,
 chunk: Chunk,
 name: ?*Obj.String,
 
@@ -17,7 +17,7 @@ pub fn getObj(self: *Function) *Obj {
 pub fn init(alloc: std.mem.Allocator) Function {
     return Function{
         .alloc = alloc,
-        .arity = undefined,
+        .arity = 0,
         .chunk = Chunk.init(alloc),
         .name = null,
         .obj = .{ .typ = .Function },

@@ -64,12 +64,12 @@ pub fn fromConstant(str: []const u8, alloc: std.mem.Allocator) !*String {
     return obj_str;
 }
 
-pub fn fromCopy(str: []const u8, alloc: std.mem.Allocator) !*Obj {
+pub fn fromCopy(str: []const u8, alloc: std.mem.Allocator) !*String {
     const obj_str = try allocateStringOwned(str.len, alloc);
     @memcpy(obj_str.getStringPtrMut(), str);
     obj_str._hash = String.hash(obj_str.getString());
 
-    return obj_str.getObj();
+    return obj_str;
 }
 
 pub fn withFn(init: fn (buf: []u8, data: *const anyopaque) void, data: *const anyopaque, len: usize, alloc: std.mem.Allocator) !*String {

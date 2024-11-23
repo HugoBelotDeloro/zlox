@@ -5,11 +5,16 @@ const OpCode = Chunk.OpCode;
 const values = @import("value.zig");
 
 pub fn disassembleFunction(function: *Obj.Function, writer: std.io.AnyWriter) !void {
-    try writer.print("== {s} ==\n", .{function});
+    const name = if (function.name) |name| name.getString() else "script";
+    try disassembleChunk(&function.chunk, name, writer);
+}
+
+pub fn disassembleChunk(chunk: *Chunk, name: []const u8, writer: std.io.AnyWriter) !void {
+    try writer.print("== {s} ==\n", .{name});
 
     var i: usize = 0;
-    while (i < function.chunk.code.items.len) {
-        i = try disassembleInstruction(&function.chunk, i, writer);
+    while (i < chunk.code.items.len) {
+        i = try disassembleInstruction(chunk, i, writer);
     }
 }
 

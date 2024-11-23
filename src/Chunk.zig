@@ -166,6 +166,18 @@ fn updateLines(self: *Chunk, line: u32, bytes_added_count: u32) !void {
     }
 }
 
+pub fn format(
+    self: *Chunk,
+    comptime fmt: []const u8,
+    options: std.fmt.FormatOptions,
+    writer: anytype,
+) !void {
+    _ = fmt;
+    _ = options;
+
+    try @import("debug.zig").disassembleChunk(self, "debug", writer);
+}
+
 test "constants" {
     var chunk = Chunk.init(std.testing.allocator);
     defer chunk.deinit();
